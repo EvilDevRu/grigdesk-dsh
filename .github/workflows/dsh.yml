@@ -109,7 +109,7 @@ jobs:
         run: |
           MODE=$(node -p "require('./contracts/grigdesk-host-contract.json').glm.mode")
           node scripts/admissionCheck.mts --binary "$GRIGDESK_DSH_CACHE/out/deepseek-${{ matrix.target }}" \
-            --mode "$MODE" --host-contract contracts/grigdesk-host-contract.json
+            --mode "$MODE" --host-contract "$GITHUB_WORKSPACE/contracts/grigdesk-host-contract.json"
       - name: Артефакт цели
         uses: actions/upload-artifact@v4
         with:
@@ -155,7 +155,7 @@ jobs:
         run: |
           MODE=$(node -p "require('./contracts/grigdesk-host-contract.json').glm.mode")
           node scripts/admissionCheck.mts --binary .cache/release-download/deepseek-linux-x64 \
-            --mode "$MODE" --host-contract contracts/grigdesk-host-contract.json
+            --mode "$MODE" --host-contract "$GITHUB_WORKSPACE/contracts/grigdesk-host-contract.json"
       - name: Опубликовать Release
         env:
           GH_TOKEN: ${{ github.token }}

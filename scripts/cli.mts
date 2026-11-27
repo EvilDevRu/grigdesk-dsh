@@ -252,7 +252,22 @@ async function admit({ values, flags }: Parsed): Promise<void> {
   }
 }
 
-interface ReleaseAsset {
+/**
+ * Платформонезависимая identity generation: источник Harness, composition и lock
+ * общие для всех целей одного тега, тогда как buildId включает платформу, ABI и компилятор.
+ */
+interface GenerationIdentity {
+  binaryVersion: string;
+  upstreamVersion: string;
+  sourceCommit: string;
+  composition: string;
+  dependencyLock: string;
+  profileRevision: string;
+  policyRevision: string;
+  admission: string[];
+}
+
+interface ReleaseAsset extends GenerationIdentity {
   file: string;
   platform: string;
   arch: string;
@@ -300,6 +315,12 @@ async function describeAsset(binary: string, withSidecar: boolean): Promise<Rele
     buildId: info.buildId,
     binaryVersion: info.binaryVersion,
     upstreamVersion: info.upstreamVersion,
+    sourceCommit: info.glm.inputs.source.commit,
+    composition: info.glm.inputs.inputIdentity.composition,
+    dependencyLock: info.glm.inputs.inputIdentity.dependencyLock,
+    profileRevision: info.glm.profileRevision,
+    policyRevision: info.glm.policyRevision,
+    admission: info.glm.admission.map((entry) => entry.mode).toSorted(),
     workerNode: info.workerNode,
     capabilities: info.capabilities as Record<string, unknown>,
     glm: {
@@ -308,6 +329,16 @@ async function describeAsset(binary: string, withSidecar: boolean): Promise<Rele
       admission: info.glm.admission.map((entry) => entry.mode),
     },
   };
+}
+
+/**
+ * Ключ generation без платформенных полей; assets одного тега обязаны дать один ключ.
+ */
+function generationKey(asset: GenerationIdentity): string {
+  return JSON.stringify([
+    asset.binaryVersion, asset.upstreamVersion, asset.sourceCommit, asset.composition,
+    asset.dependencyLock, asset.profileRevision, asset.policyRevision, asset.admission,
+  ]);
 }
 
 /**
@@ -355,10 +386,15 @@ async function release({ values, repeated, flags }: Parsed): Promise<void> {
     assets.push(await describeAsset(binary, sidecar));
   }
 
-  const builds = new Set(assets.map((asset) => asset.buildId));
+  const generations = new Map<string, string[]>();
 
-  if (builds.size !== 1) {
-    throw new Error(`ELF принадлежат разным generation: ${[...builds].join(', ')}`);
+  for (const asset of assets) {
+    generations.set(generationKey(asset), [...generations.get(generationKey(asset)) ?? [], asset.file]);
+  }
+
+  if (generations.size !== 1) {
+    throw new Error(`ELF принадлежат разным generation (источник, composition, lock или ревизии GLM): `
+      + `${[...generations.values()].map((files) => files.join('+')).join(' против ')}`);
   }
 
   await assertStableAdmission(tag, assets, prerelease);
@@ -381,12 +417,20 @@ async function release({ values, repeated, flags }: Parsed): Promise<void> {
     uploaded.push(target, `${target}.sha256`);
   }
 
+  const first = assets[0]!;
   const manifest = {
     format: MANIFEST_FORMAT,
     tag,
     createdAt: new Date().toISOString(),
     minServerVersion: values.get('--min-server-version') ?? null,
     hostContract: await readHost(),
+    generation: {
+      binaryVersion: first.binaryVersion,
+      upstreamVersion: first.upstreamVersion,
+      sourceCommit: first.sourceCommit,
+      composition: first.composition,
+      dependencyLock: first.dependencyLock,
+    },
     assets,
   };
   const manifestFile = path.join(staging, 'manifest.json');

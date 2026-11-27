@@ -118,9 +118,12 @@ consumer-тесты GrigDesk против готового ELF (`GRIGDESK_DSH_TE
   установщик читают ревизии из контракта, поэтому сверка всегда идёт с потребителем.
   Обновляется при изменении контракта в GrigDesk.
 - `manifest.json` релиза: `{ format, tag, createdAt, minServerVersion, hostContract,
-  assets: [{ file, platform, arch, sha256, size, packageId, buildId, binaryVersion,
-  upstreamVersion, workerNode, capabilities, glm }] }` — по нему GrigDesk выбирает
-  поставку и проверяет downloaded sha256.
+  generation: { binaryVersion, upstreamVersion, sourceCommit, composition, dependencyLock },
+  assets: [{ file, platform, arch, sha256, size, packageId, buildId, workerNode, capabilities,
+  glm, …поля generation }] }` — по нему GrigDesk выбирает поставку и проверяет downloaded sha256.
+  `buildId` платформо-зависим (platform, arch, ABI, компилятор); общая identity generation —
+  источник Harness, composition, dependency lock и ревизии GLM: они обязаны совпадать у всех
+  assets одного тега, что и проверяет `release`.
 - Stability: stable-тег требует допуск режима потребителя в metadata каждого ELF
   (`assertStableAdmission`) и по фактическому linux-x64 ELF; кандидат без допуска
   публикуется только как prerelease.
