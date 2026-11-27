@@ -15,7 +15,12 @@ const IMPORT_PATTERN = /(?:from|import|export)\s*\(?\s*['"](\.[^'"\n]+)['"]/g;
 const FORBIDDEN_SEGMENTS = new Set(['shared', 'server', 'deepseek']);
 // Модуль появляется в staging сборки: buildRuntime бандлит lib/node/glmGateProtocol.ts
 // в glmGateProtocol.mjs рядом с host gate, поэтому в исходнике файла нет.
-const GENERATED = new Set([path.join(ROOT, 'src/host/glmGate.mjs') + ' -> ./glmGateProtocol.mjs']);
+const GENERATED = new Set([
+  path.join(ROOT, 'src/host/glmGate.mjs') + ' -> ./glmGateProtocol.mjs',
+  // Фикстура исполняется из временного каталога рядом с копиями src/host/*,
+  // куда её кладёт tests/helpers/deepseekToolRegistry.mts.
+  path.join(ROOT, 'tests/fixtures/toolPermissionRegistry.mjs') + ' -> ./toolPermissionGate.mjs',
+]);
 
 async function walk(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });

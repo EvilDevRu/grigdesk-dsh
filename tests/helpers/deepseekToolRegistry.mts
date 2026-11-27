@@ -26,7 +26,7 @@ export async function runToolPermissionRegistry(scenario: string): Promise<strin
       await fs.copyFile(path.join(repository, 'src/host', file), path.join(directory, file));
     }
 
-    await fs.copyFile(path.join(repository, 'tests/fixtures/deepseek-harness/toolPermissionRegistry.mjs'),
+    await fs.copyFile(path.join(repository, 'tests/fixtures/toolPermissionRegistry.mjs'),
       path.join(directory, 'probe.mjs'));
 
     const result = await execute(candidate.worker, [
