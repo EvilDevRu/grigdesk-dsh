@@ -84,6 +84,12 @@ jobs:
         run: |
           node scripts/prepareRuntimeDeps.mts --node-cache-dir "$GRIGDESK_DSH_CACHE/node-cache"
           node scripts/prepareUpstream.mts
+      - name: Нативные инструменты Apple Silicon
+        # Сборщик на darwin читает Mach-O helper process-identity и его SHA только из окружения.
+        if: matrix.target == 'darwin-arm64'
+        run: |
+          xcrun --sdk macosx --show-sdk-path
+          node scripts/prepareDarwinTools.mts "$RUNNER_TEMP/dsh-darwin-tools" >> "$GITHUB_ENV"
       - name: Сборка и полная проверка ELF
         run: |
           node scripts/buildBinary.mts --out-dir "$GRIGDESK_DSH_CACHE/out" --node-cache-dir "$GRIGDESK_DSH_CACHE/node-cache"

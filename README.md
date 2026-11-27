@@ -17,7 +17,7 @@ DeepSeek и GLM и ничего о сборке не знает.
 | `src/runtime/` | Metadata, verify, packageId, compatibility |
 | `scripts/` | Сборка, установка, admission, smoke, CLI |
 | `lib/` | Общие примитивы (hash, файлы, payload-кэш, контракт ELF) и стек GLM/web-клиента |
-| `build/` | Описи pinned Node по платформам, licenses, dynamic imports |
+| `build/` | Описи pinned Node по платформам, licenses, dynamic imports, исходники нативных инструментов macOS (`build/macos/`) |
 | `ports/` | Патчи порта под закреплённую версию Harness |
 | `vendor/deepseek-harness/` | `upstream.lock.json`, патчи снимка, LICENSE; снимок materialize-ится локально |
 | `compatibility/glm.json` | **Список допусков GLM** — вход сборки, tracked в git |
