@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 
 import { decodeDeepSeekRuntimeInfo } from '../lib/chat/deepSeekBinary.ts';
 import { dshCacheHome, nodeCachePath } from '../lib/runtime/dshHome.ts';
+import { runCliMenu } from './cliMenu.mts';
 
 const run = promisify(execFile);
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -16,6 +17,7 @@ const MANIFEST_FORMAT = 1;
 const HELP = `grigdesk-dsh-ctl — сборка, проверка, допуск и установка DeepSeek Harness для GrigDesk
 
 Использование: grigdesk-dsh-ctl <команда> [аргументы]
+В терминале вызов без команды открывает меню.
 
   build     Собрать ELF: зависимости → pinned Node → снимок upstream → сборка → verify → допуск
             [--out-dir <каталог>] [--binary-version <версия>] [--require-admission] [--cache-dir <каталог>]
@@ -535,8 +537,12 @@ const COMMANDS: Record<string, { spec: CommandSpec; run: (parsed: Parsed) => Pro
   },
 };
 
-async function main(): Promise<void> {
-  const [name, ...rest] = process.argv.slice(2);
+/**
+ * Терминальное меню и явные команды используют один разбор и общие проверки.
+ * Вызов с перенаправленным вводом или выводом сохраняет текстовую справку.
+ */
+async function runCommand(argv: string[]): Promise<void> {
+  const [name, ...rest] = argv;
 
   if (!name || name === 'help' || name === '--help' || name === '-h') {
     process.stdout.write(`${HELP}\n`);
@@ -554,6 +560,18 @@ async function main(): Promise<void> {
   }
 
   await entry.run(parseFlags(rest, entry.spec));
+}
+
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+
+  if (argv.length === 0 && process.stdin.isTTY && process.stdout.isTTY) {
+    process.exitCode = await runCliMenu(runCommand);
+
+    return;
+  }
+
+  await runCommand(argv);
 }
 
 await main().catch((error: unknown) => {

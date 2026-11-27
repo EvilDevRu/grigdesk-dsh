@@ -65,8 +65,10 @@ test('команда grigdesk-dsh-ctl работает через символи
 
   const exec = promisify(execFile);
   const { stdout } = await exec(link, ['help'], { cwd: directory });
+  const redirected = await exec(link, [], { cwd: directory });
 
   assert.match(stdout, /Использование: grigdesk-dsh-ctl <команда>/u);
+  assert.equal(redirected.stdout, stdout);
 });
 
 test('package runner отвергает неизвестные параметры до запуска набора тестов', async () => {

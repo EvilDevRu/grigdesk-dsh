@@ -76,6 +76,12 @@ Identity допуска не зависит от платформы, пути и
 
 ## CLI
 
+В терминале запустите `bin/grigdesk-dsh-ctl` без аргументов. Стрелки выбирают пункт,
+Enter открывает его, Esc отменяет ввод или закрывает меню. После выполнения команды
+Enter или Esc возвращают к списку. Меню запрашивает пути и параметры, нужные выбранному
+действию. Для релиза по умолчанию готовит файлы локально, допуск GLM и очистка кэша
+требуют явного выбора. При перенаправлении ввода или вывода показывается справка.
+
 ```
 grigdesk-dsh-ctl build      [--out-dir <каталог>] [--binary-version <версия>] [--require-admission]
 grigdesk-dsh-ctl verify     --binary <ELF>
@@ -86,6 +92,7 @@ grigdesk-dsh-ctl release    --tag vX.Y.Z --binary <ELF> [--binary <ELF>...]
                            [--prerelease] [--sidecar] [--notes <файл>]
 grigdesk-dsh-ctl prune      [--keep-builds N] [--keep-releases N]
 grigdesk-dsh-ctl check
+grigdesk-dsh-ctl help
 ```
 
 `install` вызывает тот же установщик, что и GrigDesk: приватный staging, SHA256,
