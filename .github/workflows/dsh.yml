@@ -154,14 +154,14 @@ jobs:
         if: steps.tag.outputs.prerelease == ''
         run: |
           MODE=$(node -p "require('./contracts/grigdesk-host-contract.json').glm.mode")
-          node scripts/admissionCheck.mts --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-x64 \
+          node scripts/admissionCheck.mts --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-x64" \
             --mode "$MODE" --host-contract "$GITHUB_WORKSPACE/contracts/grigdesk-host-contract.json"
       - name: Опубликовать Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           node scripts/cli.mts release --tag "${GITHUB_REF_NAME}" \
-            --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-x64 \
-            --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-arm64 \
-            --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-darwin-arm64 \
+            --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-x64" \
+            --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-arm64" \
+            --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-darwin-arm64" \
             --sidecar ${{ steps.tag.outputs.prerelease }}
