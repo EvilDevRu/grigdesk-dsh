@@ -48,6 +48,8 @@ jobs:
         # Сборки ELF-кандидатов тяжёлые: последовательно, чтобы группа не превысила бюджет RSS.
         env:
           GRIGDESK_DSH_TEST_CONCURRENCY: 1
+          # Сборка ELF-кандидата одна занимает больше 4 ГБ; бюджет — под runner 16 ГБ.
+          NODE_TEST_MAX_RSS_MB: 8192
         run: node scripts/test.mts
 
   build:
