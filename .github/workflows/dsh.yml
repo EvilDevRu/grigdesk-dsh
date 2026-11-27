@@ -140,6 +140,11 @@ jobs:
           pattern: dsh-*
           path: ${{ github.workspace }}/.cache/release-download
           merge-multiple: true
+      - name: Права ELF после скачивания
+        # download-artifact не сохраняет executable bit; ELF запускается для metadata и гейта.
+        run: |
+          chmod 0755 .cache/release-download/deepseek-*
+          ls -la .cache/release-download
       - name: Классифицировать тег
         id: tag
         run: |
