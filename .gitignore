@@ -1,0 +1,24 @@
+# Зависимости и кэши
+node_modules/
+.cache/
+.cache
+
+# Локальные ключи: допуск GLM получается локально, секреты в CI не передаются
+.env
+.env.*
+!.env.example
+
+# Сборочный выход и sidecar metadata
+out/
+release/
+bin/deepseek
+bin/deepseek.*
+*.runtime-info.json
+
+# Снимок upstream Harness materialize-ится по upstream.lock.json (src: vendor/deepseek-harness)
+vendor/deepseek-harness/upstream/
+vendor/.deepseek-*/
+
+# Редакторы и ОС
+.DS_Store
+*.log

@@ -1,0 +1,36 @@
+{
+  "name": "grigdesk-dsh",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Автономная поставка DeepSeek Harness для GrigDesk: сборка ELF, проверка, допуск GLM и установка",
+  "license": "MIT",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "bin": {
+    "grigdesk-dsh": "bin/grigdesk-dsh"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "esbuild": "0.25.12",
+    "fflate": "0.8.3",
+    "postject": "1.0.0-alpha.6",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "cli": "node scripts/cli.mts",
+    "build": "node scripts/buildBinary.mts",
+    "verify": "node scripts/verify.mts",
+    "prepare:runtime": "node scripts/prepareRuntimeDeps.mts",
+    "prepare:upstream": "node scripts/prepareUpstream.mts",
+    "install:binary": "node scripts/install.mts",
+    "admission:check": "node scripts/admissionCheck.mts",
+    "admission:preflight": "node scripts/admissionPreflight.mts",
+    "smoke": "node scripts/glmLiveSmoke.mts",
+    "prune:cache": "node scripts/pruneRuntimeCache.mts",
+    "test": "node scripts/test.mts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:imports": "node scripts/checkImports.mts"
+  }
+}

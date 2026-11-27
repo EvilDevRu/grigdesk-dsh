@@ -1,0 +1,153 @@
+name: grigdesk-dsh
+
+# Сборка поставки на трёх нативных целях, проверки и публикация Release.
+# Живой smoke GLM в CI не выполняется: допуск — вход сборки (compatibility/glm.json),
+# полученный локально `grigdesk-dsh admit --admit` и зафиксированный коммитом.
+# Stable-тег требует допуск режима потребителя; кандидат без допуска — только prerelease.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+env:
+  # Кэш внутри workspace: actions/cache сохраняет его между прогонами.
+  GRIGDESK_DSH_CACHE: ${{ github.workspace }}/.cache
+
+jobs:
+  check:
+    name: Проверки пакета
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Зависимости
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Кэш pinned Node и снимка upstream
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/node-cache
+            vendor/deepseek-harness/upstream
+          key: dsh-check-${{ runner.os }}-${{ hashFiles('build/node-runtime*.json', 'build/runtime-deps/package-lock.json', 'vendor/deepseek-harness/upstream.lock.json') }}
+      - name: Типы и границы импортов
+        run: |
+          npm run -s typecheck
+          node scripts/checkImports.mts
+      - name: Подготовка среды тестов
+        run: |
+          node scripts/prepareRuntimeDeps.mts --node-cache-dir "$GRIGDESK_DSH_CACHE/node-cache"
+          node scripts/prepareUpstream.mts
+      - name: Тесты пакета через сторож памяти
+        run: node scripts/test.mts
+
+  build:
+    name: Сборка ${{ matrix.target }}
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+          - os: macos-15
+            target: darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Зависимости
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Кэш pinned Node и снимка upstream
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/node-cache
+            vendor/deepseek-harness/upstream
+          key: dsh-build-${{ matrix.target }}-${{ hashFiles('build/node-runtime*.json', 'build/runtime-deps/package-lock.json', 'vendor/deepseek-harness/upstream.lock.json') }}
+      - name: Среда сборки
+        run: |
+          node scripts/prepareRuntimeDeps.mts --node-cache-dir "$GRIGDESK_DSH_CACHE/node-cache"
+          node scripts/prepareUpstream.mts
+      - name: Сборка и полная проверка ELF
+        run: |
+          node scripts/buildBinary.mts --out-dir "$GRIGDESK_DSH_CACHE/out" --node-cache-dir "$GRIGDESK_DSH_CACHE/node-cache"
+          node scripts/verify.mts --binary "$GRIGDESK_DSH_CACHE/out/deepseek"
+      - name: Имя цели и metadata
+        # Sidecar пишет сам ELF на родном runner: linux затем описывает darwin/arm64 без запуска.
+        run: |
+          mv "$GRIGDESK_DSH_CACHE/out/deepseek" "$GRIGDESK_DSH_CACHE/out/deepseek-${{ matrix.target }}"
+          "$GRIGDESK_DSH_CACHE/out/deepseek-${{ matrix.target }}" --runtime-info --json \
+            > "$GRIGDESK_DSH_CACHE/out/deepseek-${{ matrix.target }}.runtime-info.json"
+      - name: Допуск GLM (информационно)
+        # Код 3 — допуск ещё не получен: нормальный кандидат для prerelease.
+        continue-on-error: true
+        run: |
+          MODE=$(node -p "require('./contracts/grigdesk-host-contract.json').glm.mode")
+          node scripts/admissionCheck.mts --binary "$GRIGDESK_DSH_CACHE/out/deepseek-${{ matrix.target }}" \
+            --mode "$MODE" --host-contract contracts/grigdesk-host-contract.json
+      - name: Артефакт цели
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-${{ matrix.target }}
+          path: |
+            ${{ env.GRIGDESK_DSH_CACHE }}/out/deepseek-${{ matrix.target }}
+            ${{ env.GRIGDESK_DSH_CACHE }}/out/deepseek-${{ matrix.target }}.runtime-info.json
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Зависимости
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Скачать ELF всех целей
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dsh-*
+          path: ${{ github.workspace }}/.cache/release-download
+          merge-multiple: true
+      - name: Классифицировать тег
+        id: tag
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            echo "prerelease=--prerelease" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Stable требует допуск по фактическому linux-x64 ELF
+        # Identity допуска не зависит от платформы, поэтому linux-x64 ELF представляет все цели;
+        # CLI ниже дополнительно требует запись допуска в metadata каждого ELF и один buildId.
+        if: steps.tag.outputs.prerelease == ''
+        run: |
+          MODE=$(node -p "require('./contracts/grigdesk-host-contract.json').glm.mode")
+          node scripts/admissionCheck.mts --binary .cache/release-download/deepseek-linux-x64 \
+            --mode "$MODE" --host-contract contracts/grigdesk-host-contract.json
+      - name: Опубликовать Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/cli.mts release --tag "${GITHUB_REF_NAME}" \
+            --binary .cache/release-download/deepseek-linux-x64 \
+            --binary .cache/release-download/deepseek-linux-arm64 \
+            --binary .cache/release-download/deepseek-darwin-arm64 \
+            --sidecar ${{ steps.tag.outputs.prerelease }}
