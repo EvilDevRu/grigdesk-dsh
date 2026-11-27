@@ -100,10 +100,11 @@ async function main(): Promise<void> {
 
 /**
  * Диагностика включается только переменной сборки/CI: stdout и stderr пользователя
- * и его окружение в обычный вывод не попадают, как и раньше.
+ * и его окружение в обычный вывод не попадают, как и раньше. Режим `--runtime-info`
+ * остаётся чистым и окружение не читает даже при отказе.
  */
-function writeLauncherTrace(error: unknown): void {
-  if (process.env.GRIGDESK_DSH_LAUNCHER_TRACE !== '1') {
+function writeLauncherTrace(error: unknown, runtimeInfoOnly: boolean): void {
+  if (runtimeInfoOnly || process.env.GRIGDESK_DSH_LAUNCHER_TRACE !== '1') {
     return;
   }
 
@@ -120,8 +121,9 @@ function writeLauncherTrace(error: unknown): void {
 void main().catch((error: unknown) => {
   const metadata = process.argv.slice(2).some((arg) => arg === '--runtime-info' || arg === '--verify');
   const result = launcherFailure(error, metadata);
+  const runtimeInfoOnly = process.argv.slice(2).includes('--runtime-info');
 
-  writeLauncherTrace(error);
+  writeLauncherTrace(error, runtimeInfoOnly);
   process.stderr.write(result.stderr);
   process.exitCode = result.exitCode;
 });
