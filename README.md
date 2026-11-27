@@ -76,6 +76,9 @@ To restore the previous binary, choose **Roll back to …**.
 Stable releases require GLM admission for the bundled runtime. Each release includes
 `manifest.json` and a SHA-256 checksum for each binary.
 
+Pushes to `main` and pull requests run type and import checks. Pushing a `v*` tag
+runs the full tests and builds the release binaries.
+
 ## Documentation
 
 Запустите `bin/grigdesk-dsh-ctl` без аргументов, чтобы открыть меню обслуживания.

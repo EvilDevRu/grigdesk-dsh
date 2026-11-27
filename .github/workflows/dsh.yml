@@ -39,6 +39,7 @@ jobs:
       - name: Зависимости
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Кэш pinned Node и снимка upstream
+        if: github.ref_type == 'tag'
         uses: actions/cache@v4
         with:
           path: |
@@ -50,11 +51,13 @@ jobs:
           npm run -s typecheck
           node scripts/checkImports.mts
       - name: Подготовка среды тестов
+        if: github.ref_type == 'tag'
         run: |
           node scripts/prepareRuntimeDeps.mts --node-cache-dir "$GRIGDESK_DSH_CACHE/node-cache"
           node scripts/prepareUpstream.mts
       - name: Тесты пакета через сторож памяти
-        # Сборки ELF-кандидатов тяжёлые: последовательно, чтобы группа не превысила бюджет RSS.
+        # Тесты собирают ELF-кандидат. На пушах ветки и в PR остаются типы и границы импортов.
+        if: github.ref_type == 'tag'
         env:
           GRIGDESK_DSH_TEST_CONCURRENCY: 1
           # Сборка ELF-кандидата одна занимает больше 4 ГБ; бюджет — под runner 16 ГБ.
@@ -63,7 +66,7 @@ jobs:
 
   build:
     name: Сборка ${{ matrix.target }}
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: check
     strategy:
       fail-fast: false
@@ -133,9 +136,11 @@ jobs:
   release:
     name: GitHub Release
     # По тегу — после сборок; вручную — переиспользует артефакты готового прогона.
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.build.result == 'success') }}
     needs: build
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -161,8 +166,7 @@ jobs:
       - name: Классифицировать тег
         id: tag
         run: |
-          echo "tag=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
-          if [[ "${{ inputs.tag || github.ref_name }}" == *-* ]]; then
+          if [[ "$RELEASE_TAG" == *-* ]]; then
             echo "prerelease=--prerelease" >> "$GITHUB_OUTPUT"
           else
             echo "prerelease=" >> "$GITHUB_OUTPUT"
@@ -179,7 +183,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/cli.mts release --tag "${{ inputs.tag || github.ref_name }}" \
+          node scripts/cli.mts release --tag "$RELEASE_TAG" \
             --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-x64" \
             --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-arm64" \
             --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-darwin-arm64" \
