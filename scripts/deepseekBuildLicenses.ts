@@ -22,6 +22,30 @@ export async function writeDeepSeekLicenseInventory(
   await fs.mkdir(directory);
 
   /**
+   * Перечисляет файлы лицензий пакета рекурсивно в отсортированном posix-виде
+   * относительно корня generation: подкаталоги (webgpu) входят целиком.
+   */
+  const listLicenseFiles = async (directory: string, relative: string): Promise<string[]> => {
+    const result: string[] = [];
+
+    const visit = async (current: string, tail: string): Promise<void> => {
+      for (const entry of (await fs.readdir(current, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+        const next = path.posix.join(tail, entry.name);
+
+        if (entry.isDirectory()) {
+          await visit(path.join(current, entry.name), next);
+        } else if (entry.isFile()) {
+          result.push(path.posix.join(relative, next));
+        }
+      }
+    };
+
+    await visit(directory, 'licenses');
+
+    return result;
+  };
+
+  /**
    * License-файл сохраняется с оригинальными байтами и SHA-256.
    * Имена берутся из controlled package directory, без сетевого восстановления notice.
    */
@@ -73,6 +97,21 @@ export async function writeDeepSeekLicenseInventory(
         path.posix.join(relative, 'licenses/NOTICE'),
         path.posix.join(relative, 'licenses/DeepSeek-Harness-MIT.txt'),
       );
+    }
+
+    // Нативные пакеты LibreOffice Kit (darwin) держат тот же набор иначе: MPL, атрибуция
+    // третьих сторон и licenses/webgpu/** рекурсивно. Состав проверяется по обязательным
+    // именам, чтобы тихая замена пакета не оставила generation без notice.
+    if (originals.length === 0 && /^@deepseek-ai\/libreoffice-kit-[a-z0-9-]+$/u.test(manifest.name)
+      && manifest.version === '0.2.3' && manifest.license === 'MPL-2.0') {
+      const listed = await listLicenseFiles(path.join(absolute, 'licenses'), relative);
+      const names = listed.map((file) => path.posix.basename(file));
+
+      if (!names.includes('DeepSeek-Harness-MIT.txt') || !names.some((name) => /MPL-2\.0/u.test(name))) {
+        throw new Error(`Неполный licenses/ у ${manifest.name}@${manifest.version}`);
+      }
+
+      originals.push(...listed);
     }
 
     if (originals.length === 0 && manifest.name === '@xterm/headless' && manifest.version === '6.0.0') {
