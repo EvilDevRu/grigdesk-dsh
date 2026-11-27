@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { decodeDeepSeekRuntimeInfo } from '../lib/chat/deepSeekBinary.ts';
-import { dshCacheHome } from '../lib/runtime/dshHome.ts';
+import { dshCacheHome, nodeCachePath } from '../lib/runtime/dshHome.ts';
 
 const run = promisify(execFile);
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -159,7 +159,7 @@ async function exists(file: string): Promise<boolean> {
 async function build({ values, flags }: Parsed): Promise<void> {
   const cache = cacheHome(values);
   const outDir = path.resolve(values.get('--out-dir') ?? path.join(cache, 'out'));
-  const nodeCache = path.join(cache, 'node-cache');
+  const nodeCache = nodeCachePath(cache);
 
   await ensureCode(await command('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund']), 'зависимости пакета');
   await ensureCode(await script('prepareRuntimeDeps.mts', ['--node-cache-dir', nodeCache]), 'подготовка pinned Node');
@@ -408,7 +408,7 @@ async function release({ values, repeated, flags }: Parsed): Promise<void> {
 }
 
 async function prune({ values }: Parsed): Promise<void> {
-  const args = ['--cache-dir', path.join(cacheHome(values), 'node-cache')];
+  const args = ['--cache-dir', nodeCachePath(cacheHome(values))];
 
   for (const flag of ['--keep-builds', '--keep-releases']) {
     const value = values.get(flag);

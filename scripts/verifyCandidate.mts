@@ -16,10 +16,10 @@ if (args.length !== 2 || args[0] !== '--vendor-dir' || !args[1]) {
   throw new Error('Candidate gate требует --vendor-dir <каталог>');
 }
 
-const artifactRoot = process.env.GRIGDESK_TEST_DEEPSEEK_ROOT
+const artifactRoot = process.env.GRIGDESK_DSH_TEST_ROOT
   ?? path.join(dshArtifactsPath({ env: process.env, home: os.homedir() }), 'deepseek-binary');
 const parent = path.join(artifactRoot, 'gates');
-const nodeCacheDir = path.resolve(process.env.GRIGDESK_DEEPSEEK_NODE_CACHE
+const nodeCacheDir = path.resolve(process.env.GRIGDESK_DSH_NODE_CACHE
   ?? path.join(parent, '../node-cache'));
 const execute = promisify(execFile);
 

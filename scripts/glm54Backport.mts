@@ -1,4 +1,4 @@
-export const GLM_54_BACKPORT_ENV = 'GRIGDESK_DEEPSEEK_GLM_54_BACKPORT';
+export const GLM_54_BACKPORT_ENV = 'GRIGDESK_DSH_GLM_54_BACKPORT';
 export const GLM_54_BACKPORT_PATCH = 'build/optional-patches/glm54-models.patch';
 
 /**

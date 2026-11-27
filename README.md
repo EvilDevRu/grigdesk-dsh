@@ -108,7 +108,7 @@ grigdesk-dsh check
 Профиль smoke **не включает** `grigdesk:glm-gate` и серверные hooks: native gate ELF
 на каждый инструмент вызывает helper политики GrigDesk, который живёт на сервере.
 Серверную политику (SSH/DB deny, hooks-alive, approval, subagent lineage) доказывают
-consumer-тесты GrigDesk против готового ELF (`GRIGDESK_TEST_DEEPSEEK_BINARY`).
+consumer-тесты GrigDesk против готового ELF (`GRIGDESK_DSH_TEST_BINARY`).
 Переносить серверную политику сюда означал бы два источника истины.
 
 ## Контракты
@@ -135,7 +135,7 @@ npm test                     # через сторож памяти; тяжёл�
 
 Настоящие ELF-сценарии против серверного клиента протокола (бывший `test:sea`)
 остались в GrigDesk как consumer-тесты: они запускают готовый ELF через
-`GRIGDESK_TEST_DEEPSEEK_BINARY` и проверяют серверную политику.
+`GRIGDESK_DSH_TEST_BINARY` и проверяют серверную политику.
 
 Тесты требуют `prepare:runtime` и `prepare:upstream`; сборка candidate занимает
 несколько сотен МБ во `<cache>/artifacts/deepseek-binary`.

@@ -19,7 +19,7 @@ import {
   componentNodeRuntimeManifest, readTargetNodeRuntime, seaHostTarget, type NodeRuntime,
 } from '../../lib/node/nodeRuntime.ts';
 import { nodeArchive } from '../../lib/node/seaBuild.ts';
-import { dshArtifactsPath } from '../../lib/runtime/dshHome.ts';
+import { dshArtifactsPath, dshCacheHome, nodeCachePath } from '../../lib/runtime/dshHome.ts';
 import { binaryPackageInputs } from '../../scripts/binaryInputs.mts';
 import { deepSeekBuildInputs } from '../../scripts/buildRuntime.mts';
 import { deepSeekPackagePaths } from '../../scripts/paths.ts';
@@ -137,11 +137,11 @@ async function buildCandidate(
 }
 
 /**
- * CI может хранить suite fixtures внутри темы, а общий pinned cache выбирать отдельно.
- * Явный root относится только к тестовым артефактам и не меняет default runtime приложения.
+ * Явный root относится только к тестовым артефактам (сборки кандидатов) и не меняет
+ * ни кэш pinned Node, ни default runtime приложения.
  */
 export function deepSeekTestArtifactsRoot(): string {
-  const directory = process.env.GRIGDESK_TEST_DEEPSEEK_ROOT
+  const directory = process.env.GRIGDESK_DSH_TEST_ROOT
     ?? path.join(dshArtifactsPath({ env: process.env, home: os.homedir() }), 'deepseek-binary');
 
   if (!path.isAbsolute(directory) || path.resolve(directory) === path.parse(directory).root) {
@@ -152,14 +152,15 @@ export function deepSeekTestArtifactsRoot(): string {
 }
 
 /**
- * Source-проверки и binary candidate читают один явно подготовленный prefix pinned Node.
- * Общий verifier проверяет stamp и exact lock; helper не устанавливает зависимости.
+ * Source-проверки и binary candidate читают тот же кэш pinned Node, что готовят
+ * CLI `build` и workflow: `GRIGDESK_DSH_NODE_CACHE` или `<кэш>/node-cache`.
+ * Verifier проверяет stamp и exact lock; helper не устанавливает зависимости.
  */
 export async function testDeepSeekRuntimeDependencies(): Promise<
   PreparedRuntimeDependencies & { cacheDir: string }
 > {
-  const root = deepSeekTestArtifactsRoot();
-  const cacheDir = process.env.GRIGDESK_DEEPSEEK_NODE_CACHE ?? path.join(root, 'node-cache');
+  const cacheDir = process.env.GRIGDESK_DSH_NODE_CACHE
+    ?? nodeCachePath(dshCacheHome({ env: process.env, home: os.homedir() }));
   const dependencies = await readPreparedRuntimeDependencies(cacheDir);
 
   return { ...dependencies, cacheDir };
@@ -241,13 +242,13 @@ async function resolvedTestPath(directory: string): Promise<string> {
  */
 export async function ensureTestDeepSeekBinary(): Promise<TestDeepSeekBinary> {
   const root = deepSeekTestArtifactsRoot();
-  const retention = process.env.GRIGDESK_TEST_DEEPSEEK_RETENTION;
-  const generations = process.env.GRIGDESK_TEST_DEEPSEEK_KEEP_GENERATIONS;
+  const retention = process.env.GRIGDESK_DSH_TEST_RETENTION;
+  const generations = process.env.GRIGDESK_DSH_TEST_KEEP_GENERATIONS;
   const olderThanMs = retention === undefined
     ? DEFAULT_ARTIFACT_RETENTION_MS : parseArtifactRetention(retention);
   const keepGenerations = generations === undefined
     ? DEFAULT_KEEP_GENERATIONS : parseKeepGenerations(generations);
-  const explicit = process.env.GRIGDESK_TEST_DEEPSEEK_BINARY;
+  const explicit = process.env.GRIGDESK_DSH_TEST_BINARY;
   let directory: string;
   let cache: string;
   let explicitBinary = '';
@@ -255,9 +256,9 @@ export async function ensureTestDeepSeekBinary(): Promise<TestDeepSeekBinary> {
 
   if (explicit) {
     explicitBinary = path.resolve(explicit);
-    directory = process.env.GRIGDESK_TEST_DEEPSEEK_CACHE_DIR
+    directory = process.env.GRIGDESK_DSH_TEST_CACHE_DIR
       ?? path.join(root, 'explicit-cache', sha256(explicitBinary));
-    explicitPayload = process.env.GRIGDESK_TEST_DEEPSEEK_PAYLOAD ?? '';
+    explicitPayload = process.env.GRIGDESK_DSH_TEST_PAYLOAD ?? '';
     cache = '';
 
     if (!path.isAbsolute(directory) || explicitPayload && !path.isAbsolute(explicitPayload)) {

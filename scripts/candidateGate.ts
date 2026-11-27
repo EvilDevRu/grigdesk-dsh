@@ -51,11 +51,11 @@ export async function runDeepSeekCandidateGate(
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    GRIGDESK_TEST_DEEPSEEK_VENDOR_DIR: options.vendorDir,
-    GRIGDESK_DEEPSEEK_NODE_CACHE: options.nodeCacheDir,
-    GRIGDESK_TEST_DEEPSEEK_BINARY: path.join(options.outputDir, 'deepseek'),
-    GRIGDESK_TEST_DEEPSEEK_CACHE_DIR: path.join(options.outputDir, 'test-cache'),
-    GRIGDESK_TEST_DEEPSEEK_PAYLOAD: path.join(options.nodeCacheDir, 'payloads', payload, 'payload.zip'),
+    GRIGDESK_DSH_TEST_VENDOR_DIR: options.vendorDir,
+    GRIGDESK_DSH_NODE_CACHE: options.nodeCacheDir,
+    GRIGDESK_DSH_TEST_BINARY: path.join(options.outputDir, 'deepseek'),
+    GRIGDESK_DSH_TEST_CACHE_DIR: path.join(options.outputDir, 'test-cache'),
+    GRIGDESK_DSH_TEST_PAYLOAD: path.join(options.nodeCacheDir, 'payloads', payload, 'payload.zip'),
     GRIGDESK_TEST_GLM_DELIVERY: 'binary',
     GRIGDESK_RELEASE_PUBLISH_CONTRACT: '2',
     NODE_TEST_MAX_RSS_MB: '4096',
@@ -63,7 +63,7 @@ export async function runDeepSeekCandidateGate(
   };
 
   delete env.NODE_TEST_CONTEXT;
-  delete env.GRIGDESK_TEST_DEEPSEEK_ARTIFACT;
+  delete env.GRIGDESK_DSH_TEST_ARTIFACT;
 
   const packageDir = path.join(options.repository, 'deepseek');
   const commands: [string, string[]][] = [

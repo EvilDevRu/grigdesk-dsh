@@ -40,3 +40,12 @@ export function dshCacheHome(input: DshCacheInput = {}): string {
 export function dshArtifactsPath(input: DshCacheInput = {}): string {
   return path.join(dshCacheHome(input), 'artifacts');
 }
+
+/**
+ * Кэш pinned worker Node и runtime deps внутри корня кэша.
+ * Один источник пути для CLI, workflow и тестового хелпера: расхождение здесь
+ * приводило к тому, что CI готовил кэш не там, где его искали тесты.
+ */
+export function nodeCachePath(cacheHome: string): string {
+  return path.join(cacheHome, 'node-cache');
+}

@@ -16,8 +16,8 @@ import {
 } from './helpers/deepseekBinary.mts';
 
 const ENVIRONMENT = [
-  'GRIGDESK_DEEPSEEK_NODE_CACHE',
-  'GRIGDESK_TEST_DEEPSEEK_ROOT',
+  'GRIGDESK_DSH_NODE_CACHE',
+  'GRIGDESK_DSH_TEST_ROOT',
   'GRIGDESK_DSH_CACHE',
 ] as const;
 
@@ -45,9 +45,9 @@ async function fixture(t: TestContext): Promise<string> {
     await fs.rm(root, { recursive: true, force: true });
   });
 
-  delete process.env.GRIGDESK_DEEPSEEK_NODE_CACHE;
-  delete process.env.GRIGDESK_TEST_DEEPSEEK_ROOT;
-  process.env.GRIGDESK_DSH_CACHE = path.join(root, 'artifacts');
+  delete process.env.GRIGDESK_DSH_NODE_CACHE;
+  delete process.env.GRIGDESK_DSH_TEST_ROOT;
+  process.env.GRIGDESK_DSH_CACHE = root;
 
   return root;
 }
@@ -119,20 +119,18 @@ for (const target of ['linux-arm64', 'darwin-arm64'] as const) {
   });
 }
 
-for (const mode of ['explicit-cache', 'test-root', 'artifacts'] as const) {
+for (const mode of ['explicit-cache', 'default'] as const) {
   test(`source dependencies выбирают ${mode} по общему binary-контракту`, async (t) => {
     const root = await fixture(t);
     let cache: string;
 
     if (mode === 'explicit-cache') {
       cache = path.join(root, 'chosen-cache');
-      process.env.GRIGDESK_DEEPSEEK_NODE_CACHE = cache;
-      process.env.GRIGDESK_TEST_DEEPSEEK_ROOT = path.join(root, 'unused-root');
-    } else if (mode === 'test-root') {
-      process.env.GRIGDESK_TEST_DEEPSEEK_ROOT = path.join(root, 'test-root');
-      cache = path.join(process.env.GRIGDESK_TEST_DEEPSEEK_ROOT, 'node-cache');
+      process.env.GRIGDESK_DSH_NODE_CACHE = cache;
+      process.env.GRIGDESK_DSH_TEST_ROOT = path.join(root, 'unused-root');
     } else {
-      cache = path.join(root, 'artifacts/deepseek-binary/node-cache');
+      // Default — тот же <кэш>/node-cache, что готовят CLI и workflow.
+      cache = path.join(root, 'node-cache');
     }
 
     const { directory, node } = await preparedFixture(cache);
@@ -149,9 +147,9 @@ test('неподготовленный explicit cache не получает fall
   const root = await fixture(t);
   const cache = path.join(root, 'missing-cache');
 
-  process.env.GRIGDESK_TEST_DEEPSEEK_ROOT = path.join(root, 'ready-root');
-  await preparedFixture(path.join(process.env.GRIGDESK_TEST_DEEPSEEK_ROOT, 'node-cache'));
-  process.env.GRIGDESK_DEEPSEEK_NODE_CACHE = cache;
+  // Default-кэш подготовлен, но явный путь обязан использоваться без fallback на него.
+  await preparedFixture(path.join(root, 'node-cache'));
+  process.env.GRIGDESK_DSH_NODE_CACHE = cache;
 
   await assert.rejects(testDeepSeekRuntimeDependencies(), {
     message: 'Подготовьте зависимости pinned Node: npm run prepare:runtime -- '
@@ -169,7 +167,7 @@ for (const broken of ['stamp', 'version', 'archive', 'node', 'package.json', 'pa
     const stampFile = path.join(directory, '.prepared.json');
     let changed = stampFile;
 
-    process.env.GRIGDESK_DEEPSEEK_NODE_CACHE = cache;
+    process.env.GRIGDESK_DSH_NODE_CACHE = cache;
 
     if (broken === 'version' || broken === 'archive') {
       const stamp = JSON.parse(await fs.readFile(stampFile, 'utf8'));

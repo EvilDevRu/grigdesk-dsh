@@ -14,7 +14,7 @@ const exec = promisify(execFile);
  * Вне проверки staging они используют обычный закреплённый снимок.
  */
 export function selectedDeepSeekVendor(): string {
-  return process.env.GRIGDESK_TEST_DEEPSEEK_VENDOR_DIR ?? deepSeekPackagePaths().vendorDir;
+  return process.env.GRIGDESK_DSH_TEST_VENDOR_DIR ?? deepSeekPackagePaths().vendorDir;
 }
 
 /**

@@ -12,10 +12,10 @@ test('патч каталога GLM-5.4 входит в штатный сним�
 
   assert.ok(patch);
 
-  const initial = process.env.GRIGDESK_DEEPSEEK_GLM_54_BACKPORT;
+  const initial = process.env.GRIGDESK_DSH_GLM_54_BACKPORT;
 
   try {
-    delete process.env.GRIGDESK_DEEPSEEK_GLM_54_BACKPORT;
+    delete process.env.GRIGDESK_DSH_GLM_54_BACKPORT;
 
     const standard = await deepSeekBuildInputs(vendorDir);
     const identity = await glmRuntimeIdentity({ vendorDir });
@@ -23,15 +23,15 @@ test('патч каталога GLM-5.4 входит в штатный сним�
     assert.ok(identity.llmPiAi?.patches.some((entry) => entry.path === patch.path
       && entry.sha256 === patch.sha256));
 
-    process.env.GRIGDESK_DEEPSEEK_GLM_54_BACKPORT = '1';
+    process.env.GRIGDESK_DSH_GLM_54_BACKPORT = '1';
 
     assert.deepEqual(await deepSeekBuildInputs(vendorDir), standard);
     assert.deepEqual(await glmRuntimeIdentity({ vendorDir }), identity);
   } finally {
     if (initial === undefined) {
-      delete process.env.GRIGDESK_DEEPSEEK_GLM_54_BACKPORT;
+      delete process.env.GRIGDESK_DSH_GLM_54_BACKPORT;
     } else {
-      process.env.GRIGDESK_DEEPSEEK_GLM_54_BACKPORT = initial;
+      process.env.GRIGDESK_DSH_GLM_54_BACKPORT = initial;
     }
   }
 });
