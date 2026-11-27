@@ -33,6 +33,8 @@ export interface BinaryBuildSteps {
   prepare(work: string, options: BinaryBuildOptions): Promise<DeepSeekManifest>;
   postject(work: string): Promise<void>;
   smoke(binary: string, manifest: DeepSeekRuntimeInfo, work: string): Promise<void>;
+  /** Дополнительные SEA-ресурсы цели (нативные инструменты darwin), уже размещённые в work. */
+  assets?(work: string): Promise<Record<string, string>>;
 }
 
 /**
@@ -126,10 +128,15 @@ export async function executeBinaryBuild(
 
     await writeFile(path.join(work, 'manifest.json'), manifestBytes(manifest));
     await writeFile(path.join(work, 'package-id'), manifest.packageId);
+    // Нативные инструменты darwin входят в SEA отдельными ресурсами: launcher читает
+    // время старта процесса до распаковки payload, поэтому helper не может лежать только внутри него.
+    const nativeAssets = steps.assets ? await steps.assets(work) : {};
+
     await writeFile(path.join(work, 'sea-config.json'), JSON.stringify(seaConfig({
       'manifest.json': 'manifest.json',
       'package-id': 'package-id',
       'payload.zip': 'payload.zip',
+      ...nativeAssets,
     })));
     await steps.run(path.join(work, 'bin/node'), ['--experimental-sea-config', 'sea-config.json'], {
       cwd: work,

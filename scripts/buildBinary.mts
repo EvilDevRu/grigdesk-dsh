@@ -10,6 +10,7 @@ import { decodeDeepSeekRuntimeInfo } from '../lib/chat/deepSeekBinary.ts';
 import {
   componentNodeRuntimeManifest, readTargetNodeRuntime, seaHostTarget, SEA_FUSE,
 } from '../lib/node/nodeRuntime.ts';
+import { stageDarwinProcessAssets } from '../lib/node/processIdentity.ts';
 import { downloadFile, injectSea } from '../lib/node/seaBuild.ts';
 
 import { prepareBinaryPayload } from './buildPayload.mts';
@@ -89,6 +90,7 @@ export async function buildDeepSeekBinary(options: BinaryBuildOptions) {
         run: (file, args, options) => run(file, args, { ...options, maxBuffer: 4 * 1024 * 1024 }),
       });
     },
+    assets: target === 'darwin-arm64' ? (work) => stageDarwinProcessAssets(work) : undefined,
     smoke: async (binary, expected, work) => {
       const result = await run(binary, ['--runtime-info', '--json'], { env: smokeEnvironment(), timeout: 30000 });
       const info = decodeDeepSeekRuntimeInfo(JSON.parse(result.stdout));
