@@ -9,6 +9,9 @@ import { decodeDeepSeekRuntimeInfo } from '../lib/chat/deepSeekBinary.ts';
 import { dshCacheHome, nodeCachePath } from '../lib/runtime/dshHome.ts';
 import { runCliMenu } from './cliMenu.mts';
 import { runCliAction, runSteps } from './cliProgress.mts';
+import {
+  assertReleaseDownloadable, isPrereleaseVersion, NPM_PACKAGE_NAME, npmVersionFromTag, stageNpmPackage,
+} from './npmPackage.mts';
 
 const run = promisify(execFile);
 const ENTRY = fileURLToPath(import.meta.url);
@@ -33,6 +36,8 @@ const HELP = `grigdesk-dsh-ctl — сборка, проверка, допуск 
   release   Опубликовать GitHub Release с ELF, manifest.json и sha256
             --tag vX.Y.Z --binary <ELF> [--binary <ELF>...] [--prerelease] [--notes <файл>]
             [--min-server-version <версия GrigDesk>] [--sidecar] [--dry-run]
+  publish-npm  Опубликовать npm-пакет @grigdesk/deepseek версии готового релиза
+             (локально, токен в ~/.npmrc) --tag vX.Y.Z [--registry <url>] [--dry-run]
   prune     Чистка кэша поколений и резервных ELF
             [--cache-dir <каталог>] [--keep-builds N] [--keep-releases N]
   check     typecheck, границы импортов и тесты пакета
@@ -115,9 +120,9 @@ function script(name: string, args: readonly string[] = []): Promise<number> {
  * Внешняя команда (npm, gh) с наследованием stdio; отсутствие binaries
  * превращается в понятную ошибку имени команды.
  */
-function command(binary: string, args: readonly string[]): Promise<number> {
+function command(binary: string, args: readonly string[], cwd = ROOT): Promise<number> {
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, { cwd: ROOT, stdio: 'inherit' });
+    const child = spawn(binary, args, { cwd, stdio: 'inherit' });
 
     child.once('error', (error) => reject(new Error(`Не удалось запустить ${binary}: ${(error as Error).message}`)));
     child.once('close', (code) => resolve(code ?? 1));
@@ -494,6 +499,51 @@ async function release({ values, repeated, flags }: Parsed): Promise<void> {
   process.stdout.write(`Опубликован ${tag}: ${uploaded.length} файлов из ${staging}\n`);
 }
 
+/**
+ * Публикация npm-пакета идёт локально, как и допуск GLM: токен берётся из ~/.npmrc
+ * человека, в CI секретов нет. Staging копирует npm/ с версией тега, npm pack
+ * собирает tarball, prerelease уходит с dist-tag next.
+ */
+async function publishNpm({ values, flags }: Parsed): Promise<void> {
+  const tag = required(values, '--tag');
+  const version = npmVersionFromTag(tag);
+  const distTag = isPrereleaseVersion(version) ? 'next' : 'latest';
+  const registry = values.get('--registry');
+  const assets = await assertReleaseDownloadable(tag);
+  const staging = path.join(cacheHome(values), 'release', tag, 'npm');
+
+  await stageNpmPackage({
+    source: path.join(ROOT, 'npm'),
+    staging,
+    version,
+    license: path.join(ROOT, 'LICENSE'),
+  });
+
+  process.stdout.write(`Релиз ${tag}: ${assets.join(', ')}\n`
+    + `Пакет ${NPM_PACKAGE_NAME}@${version} → ${distTag}\n`);
+
+  await ensureCode(await command('npm', ['pack', '--pack-destination', staging], staging), 'npm pack');
+
+  const tarball = (await fs.readdir(staging)).find((name) => name.endsWith('.tgz'));
+
+  if (!tarball) {
+    throw new Error('npm pack не создал tarball');
+  }
+
+  const publish = ['publish', path.join(staging, tarball), '--access', 'public', '--tag', distTag,
+    ...(registry ? ['--registry', registry] : [])];
+
+  if (flags.has('--dry-run')) {
+    process.stdout.write(`Dry-run. Команда публикации:\n  npm ${publish.join(' ')}\n`);
+
+    return;
+  }
+
+  await ensureCode(await command('npm', publish), 'npm publish');
+  process.stdout.write(`Опубликован ${NPM_PACKAGE_NAME}@${version} (${distTag}).\n`
+    + `Проверка: npx -y ${NPM_PACKAGE_NAME}@${version} --version\n`);
+}
+
 async function prune({ values }: Parsed): Promise<void> {
   const args = ['--cache-dir', nodeCachePath(cacheHome(values))];
 
@@ -551,6 +601,10 @@ const COMMANDS: Record<string, { spec: CommandSpec; run: (parsed: Parsed) => Pro
       flags: ['--prerelease', '--sidecar', '--dry-run'],
     },
     run: release,
+  },
+  'publish-npm': {
+    spec: { values: ['--tag', '--registry', '--cache-dir'], flags: ['--dry-run'] },
+    run: publishNpm,
   },
   prune: {
     spec: { values: ['--cache-dir', '--keep-builds', '--keep-releases'], flags: [] },

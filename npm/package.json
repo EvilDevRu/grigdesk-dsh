@@ -1,0 +1,35 @@
+{
+  "name": "@grigdesk/deepseek",
+  "version": "0.0.0-dev",
+  "description": "DeepSeek Harness CLI for GrigDesk: deepseek, glm and qwen terminal commands with a pinned runtime",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=18.18"
+  },
+  "bin": {
+    "deepseek": "./bin/deepseek.mjs",
+    "glm": "./bin/glm.mjs",
+    "qwen": "./bin/qwen.mjs"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/postinstall.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EvilDevRu/grigdesk-dsh.git",
+    "directory": "npm"
+  },
+  "bugs": {
+    "url": "https://github.com/EvilDevRu/grigdesk-dsh/issues"
+  },
+  "homepage": "https://github.com/EvilDevRu/grigdesk-dsh#readme"
+}

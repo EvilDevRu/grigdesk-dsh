@@ -3,13 +3,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Сторож границ репозитория: каждый относительный импорт в src, scripts, lib и tests
+ * Сторож границ репозитория: каждый относительный импорт в src, scripts, lib, npm и tests
  * должен разрешаться в файл внутри grigdesk-dsh. Имена прежнего дерева GrigDesk
  * (`shared/`, `server/`, каталог `deepseek/`) запрещены — репозиторий самодостаточен
  * и не возвращается к ссылкам на соседний checkout.
  */
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const ROOTS = ['src', 'scripts', 'lib', 'tests'];
+const ROOTS = ['src', 'scripts', 'lib', 'npm', 'tests'];
 const EXTENSIONS = ['', '.ts', '.mts', '.mjs', '.js', '.cjs', '.json', '/index.ts'];
 const IMPORT_PATTERN = /(?:from|import|export)\s*\(?\s*['"](\.[^'"\n]+)['"]/g;
 const FORBIDDEN_SEGMENTS = new Set(['shared', 'server', 'deepseek']);

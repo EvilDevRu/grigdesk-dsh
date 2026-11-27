@@ -69,6 +69,10 @@ upstream, соберёт бинарник и проверит его. По ум�
      deepseek-<platform>-<arch> ×3, manifest.json, sha256
 
 4. GrigDesk: установка или обновление из карточки DeepSeek или GLM
+
+5. локально, после стабильного релиза:
+   bin/grigdesk-dsh-ctl publish-npm --tag v1.2.0
+   → manifest релиза доступен → tarball @grigdesk/deepseek@1.2.0 → npm publish из ~/.npmrc
 ```
 
 Identity допуска не зависит от платформы, пути и buildId — только входы Harness
@@ -98,6 +102,7 @@ grigdesk-dsh-ctl install    --binary <ELF> --target <путь> [--host-contract 
 grigdesk-dsh-ctl release    --tag vX.Y.Z --binary <ELF> [--binary <ELF>...]
                            [--prerelease] [--notes <файл>] [--min-server-version <версия GrigDesk>]
                            [--sidecar] [--dry-run]
+grigdesk-dsh-ctl publish-npm --tag vX.Y.Z [--registry <url>] [--dry-run]
 grigdesk-dsh-ctl prune      [--cache-dir <каталог>] [--keep-builds N] [--keep-releases N]
 grigdesk-dsh-ctl check
 grigdesk-dsh-ctl help
@@ -110,7 +115,40 @@ SHA-256, `--runtime-info`, полный `--verify` и контракт GrigDesk,
 
 ## Терминальный чат
 
-Команда `deepseek chat` в терминале открывает чат в текущей
+### Установка через npm
+
+```bash
+npm i -g @grigdesk/deepseek
+deepseek            # чат DeepSeek в текущей папке
+glm                 # чат GLM (Z.ai)
+qwen                # чат Qwen
+```
+
+Пакет в npm крошечный: `postinstall` скачивает ELF своей версии из GitHub Release
+того же тега (`manifest.json` → asset платформы → SHA-256) и хранит версии рядом,
+как Claude Code:
+
+```
+~/.local/share/grigdesk-dsh/versions/v1.2.3/deepseek   # ELF по версиям
+~/.local/share/grigdesk-dsh/current -> versions/v1.2.3 # действующая версия
+~/.local/bin/deepseek, glm, qwen                       # команды (ссылки на launcher'ы)
+~/.deepseek/cli/…                                     # сессии и настройки терминального чата
+```
+
+GrigDesk находит ту же установку через `current/deepseek` и зовёт ELF с прежними
+аргументами — терминал и приложение делят одну поставку и один распакованный runtime
+в `~/.grigdesk/runtimes/deepseek/`. Без сети при установке помогает
+`npm i -g --ignore-scripts @grigdesk/deepseek && deepseek install`. Зеркало релизов —
+`GRIGDESK_DEEPSEEK_DOWNLOAD_BASE`, другие каталоги — `GRIGDESK_DEEPSEEK_DATA_HOME`
+и `GRIGDESK_DEEPSEEK_BIN_DIR`.
+
+Публикация пакета идёт локально, как и допуск GLM: `grigdesk-dsh-ctl publish-npm --tag vX.Y.Z`
+проверяет manifest релиза, собирает tarball с версией тега и выполняет `npm publish`
+с токеном из `~/.npmrc`; prerelease уходит с dist-tag `next`. `--dry-run` показывает команду.
+
+### Работа с чатом
+
+Команды `deepseek`, `deepseek chat`, `glm` и `qwen` в терминале открывают чат в текущей
 папке. Флаг `-C` выбирает папку, `-p` — поставщика, `-m` — модель, `--effort` — уровень
 рассуждения, `--add-dir` — дополнительные области записи, `--schedule` — расписание GLM.
 С `--mode read-only` доступны чтение и отклонение запросов на расширение прав.
@@ -123,7 +161,7 @@ SHA-256, `--runtime-info`, полный `--verify` и контракт GrigDesk,
 | GLM Coding Plan | `ZAI_CODING_API_KEY` и `-p glm --glm-mode coding-plan` |
 | Qwen | `QWEN_API_KEY` и `-p qwen --qwen-service model-studio` или `--qwen-service token-plan` |
 
-Ключ не обязан жить в окружении: `deepseek login` спрашивает
+Ключ не обязан жить в окружении: `deepseek login` (или `glm login`, `qwen login`) спрашивает
 подключение, читает ключ скрыто, без эха и истории оболочки, и сохраняет его в
 `~/.deepseek/credentials.json` с правами 0600. `deepseek login --status` показывает, откуда
 взялся каждый ключ (последние четыре символа), `deepseek logout qwen` удаляет один ключ,

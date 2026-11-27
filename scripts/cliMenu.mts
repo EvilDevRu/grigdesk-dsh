@@ -40,6 +40,11 @@ const actions = [
     description: 'Подготовить файлы релиза или опубликовать их на GitHub.',
   },
   {
+    value: 'publish-npm',
+    label: 'Опубликовать npm-пакет',
+    description: 'Собрать @grigdesk/deepseek версии готового релиза и опубликовать в npm.',
+  },
+  {
     value: 'check',
     label: 'Проверить проект',
     description: 'Проверить типы, границы импортов и прогнать тесты.',
@@ -221,6 +226,34 @@ async function ask(
 }
 
 /**
+ * Публикация npm требует готового GitHub-релиза того же тега. Dry-run собирает
+ * tarball и показывает команду; реальная публикация — явный выбор, токен в ~/.npmrc.
+ */
+async function publishNpmArgs(terminal: Terminal): Promise<string[] | undefined> {
+  const tag = await ask(terminal, 'Тег опубликованного релиза (vX.Y.Z или vX.Y.Z-rc.N)');
+
+  if (tag === undefined) {
+    return;
+  }
+
+  const action = await choose(terminal, `npm-пакет для ${tag}`, [
+    {
+      value: 'dry-run',
+      label: 'Только собрать tarball',
+      description: 'Проверить manifest релиза и показать команду публикации.',
+    },
+    {
+      value: 'publish',
+      label: 'Опубликовать в npm',
+      description: 'npm publish с токеном из ~/.npmrc; prerelease уходит с тегом next.',
+    },
+  ]);
+
+  return action === undefined ? undefined
+    : ['publish-npm', '--tag', tag, ...(action === 'dry-run' ? ['--dry-run'] : [])];
+}
+
+/**
  * Релиз принимает все платформенные ELF и поддерживает sidecar. По умолчанию
  * файлы только готовятся локально, публикация и замена требуют явного выбора.
  */
@@ -316,6 +349,10 @@ async function actionArgs(terminal: Terminal, name: Exclude<Action, 'exit'>): Pr
   }
 
   const defaultBinary = path.join(dshCacheHome(), 'out', 'deepseek');
+
+  if (name === 'publish-npm') {
+    return publishNpmArgs(terminal);
+  }
 
   if (name === 'release') {
     return releaseArgs(terminal, defaultBinary);

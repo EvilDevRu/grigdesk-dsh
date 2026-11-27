@@ -34,6 +34,19 @@
 
 ## Install
 
+### Terminal via npm
+
+Install with Node.js 18.18 or later once the npm package and its matching GitHub release are published.
+For an unpublished build, see [Build from source](docs/development.md#быстрый-старт).
+
+```bash
+npm i -g @grigdesk/deepseek
+```
+
+The installer downloads the standalone binary for your platform and verifies its SHA-256 against `manifest.json`.
+By default, it keeps binaries under `~/.local/share/grigdesk-dsh/` and adds command links to `~/.local/bin`.
+See the [npm package documentation](npm/README.md) for mirrors and custom install paths.
+
 ### In GrigDesk
 
 In a compatible version of GrigDesk, open **Settings → AI providers → Providers → DeepSeek or GLM → Overview**.
@@ -71,7 +84,7 @@ For Linux ARM64, use `deepseek-linux-arm64` in the commands above. On macOS, use
 ## Терминальный чат
 
 При первом запуске добавьте ключ через `deepseek login` или задайте переменную окружения своего подключения.
-Для ручной установки укажите путь к бинарнику,
+Из папки проекта запустите `deepseek`, `glm` или `qwen`. Для ручной установки укажите путь к бинарнику,
 например `./deepseek-linux-x64 login` для настройки ключа и `./deepseek-linux-x64 chat` для чата.
 Выберите подключение и режим доступа стрелками или левым кликом. Колесо мыши и `PgUp`/`PgDn` листают историю.
 По умолчанию сессии и настройки чата хранятся в `~/.deepseek/cli/`. `/model` меняет модель, а `/effort`
