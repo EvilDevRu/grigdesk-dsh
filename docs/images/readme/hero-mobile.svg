@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320" viewBox="0 0 640 320"
+     role="img" aria-labelledby="title description">
+  <title id="title">DeepSeek Harness for GrigDesk</title>
+  <desc id="description">One standalone runtime for the DeepSeek and GLM executors.</desc>
+  <rect x=".5" y=".5" width="639" height="319" rx="16" fill="#191C20" stroke="#30363D"/>
+  <g transform="translate(278 24) scale(.328125)">
+    <path fill="#9A7DF5" d="M56 12H168L216 60V180L168 228H56Q16 228 16 188V52Q16 12 56 12Z"
+          transform="translate(24 12)"/>
+    <path fill="#292C46" d="M56 12H168L216 60V180L168 228H56Q16 228 16 188V52Q16 12 56 12Z"/>
+    <path fill="#FFF" transform="translate(35.264 54.763) scale(.51)"
+          d="M316.61 4.15H82.75C37.05 4.15 0 41.2 0 86.9V168.93C0 214.64 37.05 251.68 82.75 251.68H233.86C279.56 251.68 316.61 214.64 316.61 168.93V109.93H149.31V161.74H242.49V179.73C242.49 189.66 234.44 197.72 224.5 197.72H92.1C82.17 197.72 74.11 189.66 74.11 179.73V76.11C74.11 66.17 82.17 58.12 92.1 58.12H316.61Z"/>
+  </g>
+  <g font-family="Noto Sans, DejaVu Sans, Helvetica, Arial, sans-serif" text-anchor="middle">
+    <text x="320" y="159" fill="#F2F3F5" font-size="50" font-weight="700"
+          letter-spacing="-1.5">DeepSeek Harness</text>
+    <text x="320" y="208" fill="#D6DAE0" font-size="26">Standalone runtime for GrigDesk</text>
+    <path d="M144 247H496" fill="none" stroke="#59616C" stroke-width="2"/>
+    <circle cx="144" cy="247" r="5" fill="#C7CDD5"/>
+    <circle cx="320" cy="247" r="7" fill="#9A7DF5"/>
+    <circle cx="496" cy="247" r="5" fill="#C7CDD5"/>
+    <g font-size="23" fill="#D6DAE0">
+      <text x="144" y="284">DeepSeek</text>
+      <text x="320" y="284" fill="#CEBFFF">Harness</text>
+      <text x="496" y="284">GLM</text>
+    </g>
+  </g>
+</svg>
