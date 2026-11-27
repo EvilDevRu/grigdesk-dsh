@@ -79,6 +79,10 @@ Stable releases require GLM admission for the bundled runtime. Each release incl
 Pushes to `main` and pull requests run type and import checks. Pushing a `v*` tag
 runs the full tests and builds the release binaries.
 
+В GLM `subagent` и `subagent_fork` ждут результат по умолчанию. Передайте
+`run_in_background: true` для продолжимого запуска. Spawn позволяет выбрать модель
+и усилие из каталога GLM. Fork сохраняет маршрут родителя.
+
 ## Documentation
 
 Запустите `bin/grigdesk-dsh-ctl` без аргументов, чтобы открыть меню обслуживания.

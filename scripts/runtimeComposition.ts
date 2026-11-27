@@ -25,7 +25,7 @@ export function assertRuntimeClosure(
   }
 }
 
-export const COMPOSITION_REVISION = 'grigdesk-host-web-acp-v5';
+export const COMPOSITION_REVISION = 'grigdesk-host-web-acp-v6';
 
 export const RUNTIME_WORKER_PACKAGES: ReadonlySet<string> = new Set([
   '@deepseek-ai/dsh-session-persistence-jsonl',
@@ -35,6 +35,7 @@ export const HOST_OVERLAY_PACKAGES = [
   '@deepseek-ai/dsh-hooks-claude-code',
   '@deepseek-ai/dsh-mcp-client',
   '@deepseek-ai/dsh-llm-pi-ai',
+  '@deepseek-ai/dsh-tool-ralph',
 ] as const;
 
 const OMITTED_BUNDLE_PACKAGES = new Set([
@@ -492,8 +493,8 @@ export async function indexWorkspacePackages(sourceDir: string): Promise<Map<str
 }
 
 /**
- * Копия закреплённого standard меняет только foreground-контракт делегирования GLM.
- * Точная пара строк обязательна: изменение upstream не должно молча вернуть фон.
+ * Копия закреплённого standard включает управляемое делегирование GLM.
+ * Fork сохраняет маршрут родителя, spawn использует каталог GLM.
  */
 export function glmForegroundPreset(rows: any[]): any[] {
   let count = 0;
@@ -513,13 +514,26 @@ export function glmForegroundPreset(rows: any[]): any[] {
 
     const next = Object.fromEntries(Object.entries(row).map(([key, value]) => [key, visit(value)]));
 
+    if (row.id === 'delegation' && Array.isArray(next.config)) {
+      next.config.push({
+        id: 'tool-ralph',
+        name: '@deepseek-ai/dsh-tool-ralph',
+        config: { maxRounds: 16 },
+      });
+    }
+
+    if (row.id === 'tool-subagent-control') {
+      next.config = { interrupt: true };
+    }
+
     if (['tool-subagent', 'tool-subagent-fork'].includes(row.id)) {
       count += 1;
       next.config = {
         ...row.config,
-        modelSelection: false,
-        modelDiscovery: false,
+        modelSelection: row.id === 'tool-subagent',
+        modelDiscovery: row.id === 'tool-subagent',
         grigdeskForeground: true,
+        grigdeskBackground: true,
         maxDepth: 3,
       };
     }

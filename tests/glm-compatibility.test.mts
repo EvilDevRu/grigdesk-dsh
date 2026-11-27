@@ -14,7 +14,10 @@ test('GLM_ADMISSION загружает сохранённые записи бе�
 });
 
 test('каждому режиму соответствует собственный отпечаток допуска', () => {
-  assert.deepEqual(GLM_ADMISSION.map((entry) => entry.mode).toSorted(), ['api', 'coding-plan']);
-  assert.equal(new Set(GLM_ADMISSION.map((entry) => entry.compatibility)).size, 2);
+  const modes = GLM_ADMISSION.map((entry) => entry.mode);
+
+  assert.ok(modes.every((mode) => mode === 'api' || mode === 'coding-plan'));
+  assert.equal(new Set(modes).size, modes.length);
+  assert.equal(new Set(GLM_ADMISSION.map((entry) => entry.compatibility)).size, modes.length);
   assert.ok(GLM_ADMISSION.every((entry) => /^[a-f0-9]{64}$/u.test(entry.compatibility)));
 });

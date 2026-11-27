@@ -253,6 +253,10 @@
       "reason": "GrigDesk server-owned overlay"
     },
     {
+      "path": "packages/experimental/tool-ralph",
+      "reason": "Штатный инструмент Ralph в управляемом профиле GLM"
+    },
+    {
       "path": "packages/extensions/cordis-host-runner",
       "reason": "host YAML composition; @deepseek-ai/dsh-tool-cordis: pnpm workspace link; @deepseek-ai/dsh-tool-cordis: host type reference; @deepseek-ai/dsh-web-app: pnpm workspace link; @deepseek-ai/dsh-api-remotes: host type reference"
     },

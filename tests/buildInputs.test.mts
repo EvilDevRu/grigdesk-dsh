@@ -132,7 +132,7 @@ describe('runtime composition принадлежит scripts пакета', () =
 
     const composition = await import(pathToFileURL(paths.scripts.composition).href);
 
-    assert.equal(composition.COMPOSITION_REVISION, 'grigdesk-host-web-acp-v5');
+    assert.equal(composition.COMPOSITION_REVISION, 'grigdesk-host-web-acp-v6');
     assert.throws(() => composition.assertRuntimeClosure(new Set(), [
       {
         owner: 'package',

@@ -1,0 +1,36 @@
+diff --git a/packages/mcp/mcp-client/src/config.ts b/packages/mcp/mcp-client/src/config.ts
+--- a/packages/mcp/mcp-client/src/config.ts
++++ b/packages/mcp/mcp-client/src/config.ts
+@@ -52,6 +52,7 @@
+ /** Schema of {@link StdioConfig}. */
+ export const StdioSchema = z.object({
+   transport: z.const('stdio'),
++  singleStdioLaunch: z.boolean().default(false),
+   serverName: z.string().required().pattern(SERVER_NAME_PATTERN),
+   command: z.string().required(),
+   args: z.array(String).default([]),
+diff --git a/packages/mcp/mcp-client/src/index.ts b/packages/mcp/mcp-client/src/index.ts
+--- a/packages/mcp/mcp-client/src/index.ts
++++ b/packages/mcp/mcp-client/src/index.ts
+@@ -62,6 +62,8 @@
+ export interface StdioConfig {
+   /** Selects child-process stdio transport. */
+   transport: 'stdio'
++  /** Use a single stdio process and negotiate through initialize. */
++  singleStdioLaunch?: boolean
+   /**
+    * Stable local namespace for this server's model-facing tool names
+    * (`mcp__<serverName>__<rawName>`). Must match `[A-Za-z0-9_-]{1,32}` and be
+diff --git a/packages/mcp/mcp-client/src/connection.ts b/packages/mcp/mcp-client/src/connection.ts
+--- a/packages/mcp/mcp-client/src/connection.ts
++++ b/packages/mcp/mcp-client/src/connection.ts
+@@ -320,7 +320,8 @@
+   async function connectGeneration(): Promise<void> {
+     if (isStopped()) return
+     const client = new Client({ name: 'dsh-mcp-client', version: '0.0.1' }, {
+-      capabilities: {}, versionNegotiation: { mode: 'auto' },
++      capabilities: {},
++      versionNegotiation: { mode: config.transport === 'stdio' && config.singleStdioLaunch ? 'legacy' : 'auto' },
+       listChanged: { tools: { autoRefresh: false, debounceMs: 0, onChanged: () => { void refreshTools() } } },
+     })
+     const record: Generation = { wire: new McpGeneration(client, config.closeTimeoutMs, error => diagnostic(error, 'cleanup')) }

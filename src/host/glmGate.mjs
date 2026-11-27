@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { GLM_GATE_REVISION, glmGateHash, parseGlmGateProof } from './glmGateProtocol.mjs';
 
 export const name = 'grigdesk-glm-gate';
-export const inject = ['tools', 'agents', 'shell', 'sessionProjections', 'approval'];
+export const inject = ['tools', 'agents', 'shell', 'sessionProjections', 'approval', 'llm'];
 
 /**
  * Native gate принадлежит GLM-процессу и проверяет все registry executions.
@@ -20,6 +20,31 @@ export async function apply(ctx, config) {
   const document = JSON.parse(readFileSync(config.policyFile, 'utf8'));
   const projectPrefix = document.projectMcp ? `mcp__${document.projectMcp}__` : '';
   const isProjectTool = (tool) => projectPrefix && tool.startsWith(projectPrefix);
+
+  const planning = new WeakSet();
+  const planTools = new Set([
+    'read', 'read_image', 'glob', 'grep', 'web_search', 'web_fetch', 'skill',
+    'get_goal', 'ask_user_question', 'exit_plan_mode',
+  ]);
+  const visible = new Set(config.visibleTools ?? []);
+  const work = new Set(config.workToolNames ?? []);
+  const allowedFor = (tool, agent) => {
+    const child = agent.session.header.origin === 'subagent';
+
+    if (planning.has(agent.session) && !planTools.has(tool)) {
+      return false;
+    }
+
+    if (child && ['create_goal', 'update_goal', 'exit_plan_mode', 'workflow', 'ralph'].includes(tool)) {
+      return false;
+    }
+
+    if (tool === 'structured_output') {
+      return visible.has(tool) && lineage.get(agent.session)?.workflow === true;
+    }
+
+    return visible.has(tool) || work.has(tool) || !child && Boolean(isProjectTool(tool));
+  };
   const policyHash = glmGateHash(document);
   const preflight = { launchId: config.launchId, policyHash };
   const preflightProcess = await ctx.shell.execute(ctx.shell.resolve({
@@ -36,18 +61,7 @@ export async function apply(ctx, config) {
   }
 
   if (Array.isArray(config.visibleTools)) {
-    const visible = new Set(config.visibleTools);
-    const work = new Set(config.workToolNames ?? []);
-
-    ctx.provide('grigdeskGlmToolVisible', (tool, agent) => {
-      const child = agent.session.header.origin === 'subagent';
-
-      if (child && ['create_goal', 'update_goal', 'ask_user_question'].includes(tool)) {
-        return false;
-      }
-
-      return visible.has(tool) || work.has(tool) || !child && Boolean(isProjectTool(tool));
-    });
+    ctx.provide('grigdeskGlmToolVisible', allowedFor);
   }
 
   const active = new AsyncLocalStorage();
@@ -110,7 +124,8 @@ export async function apply(ctx, config) {
   function announceIfReady(session) {
     const child = lineage.get(session);
 
-    if (!child?.descriptor || !child.link || !ready.has(session) || child.announced || fatal) {
+    if (!child?.descriptor || !child.link || !ready.has(session) || child.announced || fatal
+      || child.descriptor.mode !== child.link.mode) {
       return;
     }
 
@@ -161,7 +176,13 @@ export async function apply(ctx, config) {
         throw new Error('Helper GLM не подтвердил вызов');
       }
 
-      const proof = parseGlmGateProof(result.stdout.text, binding);
+      const verdict = parseGlmGateProof(result.stdout.text, binding);
+      const child = exec.agent.session.header.origin === 'subagent';
+      const restricted = !allowedFor(exec.name, exec.agent)
+        || child && exec.arguments?.sandbox_permissions !== undefined;
+      const proof = verdict.decision === 'allow' && restricted
+        ? { ...verdict, decision: 'deny', reason: 'Вызов выходит за права агента GLM' }
+        : verdict;
 
       proofs.set(exec, proof);
       exec.agent.session.append('grigdesk/glm-policy', proof);
@@ -169,9 +190,9 @@ export async function apply(ctx, config) {
       if (proof.decision === 'deny') {
         return { kind: 'deny', reason: proof.reason };
       }
+
       if (isProjectTool(exec.name)) {
-        if (!ctx.approval || ctx.agents.get(exec.agent.id) !== exec.agent
-          || exec.agent.session.header.origin === 'subagent') {
+        if (!ctx.approval || ctx.agents.get(exec.agent.id) !== exec.agent) {
           return { kind: 'deny', reason: 'Проектный MCP требует решения человека в основном чате' };
         }
 
@@ -225,19 +246,22 @@ export async function apply(ctx, config) {
     }
   });
 
-  ctx.on('tools/execute', (exec, next) => active.run(exec, next), { global: true });
+  ctx.on('tools/execute', (exec, next) => active.run({ exec, proof: proofs.get(exec) }, next), { global: true });
   ctx.on('tools/result', (exec) => proofs.delete(exec), { global: true });
 
   ctx.on('agent/created', ({ agent }) => {
     try {
-      const exec = active.getStore();
+      const { exec, proof } = active.getStore() ?? {};
       const child = agent.session.header.origin === 'subagent';
 
       if (child) {
-        const proof = exec && proofs.get(exec);
+        const resumed = exec?.name === 'send_message';
+        const workflow = ['workflow', 'ralph'].includes(exec?.name);
+        const mode = resumed || workflow || exec?.arguments?.run_in_background === true
+          ? 'continuable' : 'one-shot';
 
-        if (!proof || proof.decision !== 'allow' || exec.signal.aborted
-          || !['subagent', 'subagent_fork'].includes(exec.name)
+        if (!proof || proof.decision !== 'allow' || !workflow && exec.signal.aborted
+          || !['subagent', 'subagent_fork', 'send_message', 'workflow', 'ralph'].includes(exec.name)
           || agent.session.header.parentSession !== exec.agent.session.id) {
           throw new Error('Создание ребёнка без вызова делегирования');
         }
@@ -250,7 +274,7 @@ export async function apply(ctx, config) {
           parentCallId: exec.callId,
           childSessionId: agent.session.id,
           childAgentId: agent.id,
-          mode: 'one-shot',
+          mode,
         };
 
         const state = lineageOf(agent.session);
@@ -260,7 +284,18 @@ export async function apply(ctx, config) {
         }
 
         state.link = link;
+        state.workflow = workflow;
         state.parent = exec.agent.session;
+        if (resumed) {
+          state.descriptor = agent.session.ownEvents().find((event) =>
+            event.type === 'subagent/descriptor' && event.data.mode === 'continuable')?.data;
+        }
+      }
+
+      const plan = agent.session.ownEvents().findLast((event) => event.type === 'plan/mode');
+
+      if (plan?.data.active === true) {
+        planning.add(agent.session);
       }
 
       ready.add(agent.session);
@@ -278,6 +313,14 @@ export async function apply(ctx, config) {
   }, { global: true });
 
   ctx.on('session/event', (session, event) => {
+    if (event.type === 'plan/mode') {
+      if (event.data.active) {
+        planning.add(session);
+      } else {
+        planning.delete(session);
+      }
+    }
+
     if (session.header.origin !== 'subagent' || event.type !== 'subagent/descriptor'
       || event.seq < session.inheritedEventCount) {
       return;
@@ -286,7 +329,7 @@ export async function apply(ctx, config) {
     try {
       const child = lineageOf(session);
 
-      if (child.descriptor || event.data.mode !== 'one-shot') {
+      if (child.descriptor || child.link && event.data.mode !== child.link.mode) {
         throw new Error('Некорректный descriptor ребёнка GLM');
       }
 
@@ -305,14 +348,30 @@ export async function apply(ctx, config) {
       return { kind: 'reject' };
     }
 
+    if (lineage.get(agent.session)?.workflow) {
+      const route = agent.model.current();
+      const models = route.provider === 'zai' ? await ctx.llm.listModels('zai') : [];
+
+      if (!models.some(({ id }) => id === route.model)) {
+        return { kind: 'reject' };
+      }
+    }
+
     return next();
   }, { global: true, prepend: true });
 
-  ctx.on('user-questions/request', (request, next) => {
-    const exec = active.getStore();
-    const proof = exec && proofs.get(exec);
+  ctx.provide('grigdeskAllowChildQuestions', (agent) => {
+    const { exec, proof } = active.getStore() ?? {};
 
-    if (fatal || !proof || proof.name !== 'ask_user_question'
+    return !fatal && proof?.decision === 'allow' && proof.name === 'ask_user_question'
+      && exec.agent === agent && !exec.signal.aborted && lineage.get(agent.session)?.announced === true;
+  });
+
+  ctx.on('user-questions/request', (request, next) => {
+    const { exec, proof } = active.getStore() ?? {};
+
+    if (fatal || !proof || proof.decision !== 'allow'
+      || !['ask_user_question', 'exit_plan_mode'].includes(proof.name)
       || request.agent !== exec.agent || exec.signal.aborted) {
       throw new Error('Вопрос GLM без подтверждённого execution');
     }

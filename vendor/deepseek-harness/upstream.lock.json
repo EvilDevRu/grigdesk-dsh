@@ -258,6 +258,10 @@
         "reason": "GrigDesk server-owned overlay"
       },
       {
+        "path": "packages/experimental/tool-ralph",
+        "reason": "Штатный инструмент Ralph в управляемом профиле GLM"
+      },
+      {
         "path": "packages/extensions/cordis-host-runner",
         "reason": "host YAML composition; @deepseek-ai/dsh-tool-cordis: pnpm workspace link; @deepseek-ai/dsh-tool-cordis: host type reference; @deepseek-ai/dsh-web-app: pnpm workspace link; @deepseek-ai/dsh-api-remotes: host type reference"
       },
@@ -2798,6 +2802,23 @@
     {"path":"packages/experimental/hooks-claude-code/tests/coverage-edge-paths.spec.ts","mode":"100644","gitBlob":"0bbcb53b03e5c6a426b60ec0fc116357ce284ff1","sha256":"46ae85092fe47719852b9631ebc2b1dfc5cb9e403cea8661cc0f0d35290d0295"},
     {"path":"packages/experimental/hooks-claude-code/tests/coverage-stop.spec.ts","mode":"100644","gitBlob":"651cb1f6f0ad0352f6324fbf28915dd3a867a04b","sha256":"a6336463706f74187d51aa6651601f55b98d9e0634fcd5cd40d5507904601535"},
     {"path":"packages/experimental/hooks-claude-code/tsconfig.json","mode":"100644","gitBlob":"e6ae515b6668328a4637fab9b4d278ad8060ca34","sha256":"bc07300de906671e58f16fe5ff47f2be83a87d06a68b3eb0cbdb4b3401f8e8a6"},
+    {"path":"packages/experimental/tool-ralph/locale/de.json","mode":"100644","gitBlob":"dd53db08461d375045c07dbe97521c5189a939c6","sha256":"804391ad4f1f18d8487d8dea9a99e2f03289e3e1bba6d1c605ca405d9c853928"},
+    {"path":"packages/experimental/tool-ralph/locale/en.json","mode":"100644","gitBlob":"fb6feb52e6f750afd6737ae1a73bbd7129595628","sha256":"5be2be24d2573062a59f0f1d4f956ac01f05913e6a33d7e7eed4b4bbd6574575"},
+    {"path":"packages/experimental/tool-ralph/locale/es.json","mode":"100644","gitBlob":"129fefecff4d197fc249d6443a91747c94f68219","sha256":"3d32dbd3a1d98e8fc3bd394e5b6cf91822bcde773572be70295790726b6b7b64"},
+    {"path":"packages/experimental/tool-ralph/locale/fr.json","mode":"100644","gitBlob":"478dd9d4ce4f76ae1821860bd14eb17423d33736","sha256":"135220ed2a60260cf9e629f724f099a7e4c2835045695ac8b5a604022190a3c9"},
+    {"path":"packages/experimental/tool-ralph/locale/ja.json","mode":"100644","gitBlob":"c016d6e957d05b4127acec07b3f7643b2d1c37d0","sha256":"0fa28efcec8fcac4a4e5f248d74f58d0f6d4a7bc429fb21eb52063a34835298f"},
+    {"path":"packages/experimental/tool-ralph/locale/pt.json","mode":"100644","gitBlob":"60ff05ca82a0c3b9a1cfcb4f5b45ca27f13959c0","sha256":"672e9deb6314aed24d518f639ebcf1f3a875a3a3acbc1cc772a3d2f83a298256"},
+    {"path":"packages/experimental/tool-ralph/locale/ru.json","mode":"100644","gitBlob":"916b972056371fa8a888a6fdc918e0dc570f3347","sha256":"fe105b99ead8faa1afe457f68d65b28be93ee8a1debc9ab825c2ab07d3f1c058"},
+    {"path":"packages/experimental/tool-ralph/locale/zh.json","mode":"100644","gitBlob":"5e9601ee1fbe2ddaf64e1af453c58d2ffdacd048","sha256":"116c178b42d223dae2de97bc7f36169da89249a6b654d959ee69e9099ee646bf"},
+    {"path":"packages/experimental/tool-ralph/package.json","mode":"100644","gitBlob":"ad67d69d0f5f2ea0ab4c5660789980e71a578558","sha256":"603f84eb66af25c92f3557dc2c667fced36fa641f5b96646e35f49d30271e075"},
+    {"path":"packages/experimental/tool-ralph/README.i18n.yaml","mode":"100644","gitBlob":"7cfcc7b21175d7804f5c9e783773e8e746b6d545","sha256":"e25dd95f044941f9e1c562a03a376beefcda296dc54b0ec61df46b0dafe56328"},
+    {"path":"packages/experimental/tool-ralph/README.md","mode":"100644","gitBlob":"65acbde9ffe6d8c4c5b30ba1dadc0a7c5b9c6a57","sha256":"1031a101b6b6520bff439633360db9f349f006a7bd9ab8b69c61e8147802f5b2"},
+    {"path":"packages/experimental/tool-ralph/README.zh.md","mode":"100644","gitBlob":"4660e2d919216d5722dc7f395e9073fc9bee0db1","sha256":"ec82405397fe4a3e43593cd75a2e35229d37b77938d8538a3fa286a4beab9f17"},
+    {"path":"packages/experimental/tool-ralph/src/error.ts","mode":"100644","gitBlob":"5b0b1cb10ec7a6a04d1b908574cee3c345ee26e8","sha256":"7d057040cff42eb73e88ba13efb977c945b29239407cab531efbc539d83457ae"},
+    {"path":"packages/experimental/tool-ralph/src/index.ts","mode":"100644","gitBlob":"43d484f75a94d7487cfe315efbf7ecbafea8bb70","sha256":"593c430185da6e99a5f055f804a1f02ffa5947cf10371972a203d16bd818e587"},
+    {"path":"packages/experimental/tool-ralph/tests/integration.spec.ts","mode":"100644","gitBlob":"44f873b6b0819b86b9309b07e94caf01fe1eef02","sha256":"f815388d76ef0619e585d0e1bfef869f5b58f35ea7792fd8c279229888864082"},
+    {"path":"packages/experimental/tool-ralph/tests/tool-ralph.spec.ts","mode":"100644","gitBlob":"a414639dcf9d283c38d69fbb517242fd71c28c46","sha256":"562f3ebbea28655f6ac9d1cf2b01b140e71890ac5d56077cfb2f65edc3e3f686"},
+    {"path":"packages/experimental/tool-ralph/tsconfig.json","mode":"100644","gitBlob":"148e3f53b65e34b8a84e3167596aa9dabc486389","sha256":"5366281130f88804b67ab89950803e49a9a5f02ef4abc0a800e1a9c12add7757"},
     {"path":"packages/extensions/cordis-host-runner/locale/de.json","mode":"100644","gitBlob":"716776ddee9dadb2fe68dd95073ddf94582a86a3","sha256":"fb53e52561f067c7c6cc2eebe4580321e3c86d3bef7ac78e5f0fce4e0fbf41fa"},
     {"path":"packages/extensions/cordis-host-runner/locale/en.json","mode":"100644","gitBlob":"9bdaa8c8af606547f33f088b7a16dd56277f28a4","sha256":"a86572976e19f100572ced34614f65dfc5afe128506a5feb258c6236c2b14c2a"},
     {"path":"packages/extensions/cordis-host-runner/locale/es.json","mode":"100644","gitBlob":"42b7cca8cc3da2129064566ab6075f9c8f6dc7c4","sha256":"1a133dda56865776aad1b12be779111993b94f980213b0a7fcd5a94c90c17340"},
@@ -6238,7 +6259,11 @@
     },
     {
       "path": "glm-foreground-subagents.patch",
-      "sha256": "f9aacb0d0faf102c4439ad4dedeee5471370cb0db7a94b1f1c9493d52c62fae8"
+      "sha256": "0057c91815e4b6d5fe5db53401622ef3329d3a53a01c0dd59520f501333bc77a"
+    },
+    {
+      "path": "glm-mcp-stdio-launch.patch",
+      "sha256": "374fbc6024b1b0c5290d5f8919940a1b753f410e2918ab701bee64dff1316eec"
     },
     {
       "path": "glm-v3-journal-events.patch",

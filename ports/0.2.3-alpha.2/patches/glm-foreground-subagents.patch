@@ -1,5 +1,5 @@
 diff --git a/packages/subagent/subagent/src/catalog.ts b/packages/subagent/subagent/src/catalog.ts
-index 836f725d..5dc00321 100644
+index 836f725..5dc0032 100644
 --- a/packages/subagent/subagent/src/catalog.ts
 +++ b/packages/subagent/subagent/src/catalog.ts
 @@ -149,9 +149,20 @@ export const subagentCatalogProjectionDefinition = {
@@ -25,7 +25,7 @@ index 836f725d..5dc00321 100644
      version: SUBAGENT_CATALOG_VERSION,
      childId: child.id,
 diff --git a/packages/subagent/subagent/src/manager.ts b/packages/subagent/subagent/src/manager.ts
-index 09bb74dd..9bee424b 100644
+index 09bb74d..9bee424 100644
 --- a/packages/subagent/subagent/src/manager.ts
 +++ b/packages/subagent/subagent/src/manager.ts
 @@ -28,7 +28,7 @@ import {
@@ -83,7 +83,7 @@ index 09bb74dd..9bee424b 100644
          if (activation.closing !== undefined) return { closing: activation.closing }
          const messageId = this.submitAdmitted(activation, content, options, root)
 diff --git a/packages/subagent/subagent/src/types.ts b/packages/subagent/subagent/src/types.ts
-index 61f10589..dd600409 100644
+index 61f1058..dd60040 100644
 --- a/packages/subagent/subagent/src/types.ts
 +++ b/packages/subagent/subagent/src/types.ts
 @@ -51,6 +51,8 @@ export interface SubagentActivationSpec extends Omit<SubagentStartRequest, 'labe
@@ -96,7 +96,7 @@ index 61f10589..dd600409 100644
  
  /** A managed execution; disposal addresses this exact activation, never a later resume. */
 diff --git a/packages/subagent/tool-subagent/src/index.ts b/packages/subagent/tool-subagent/src/index.ts
-index 6e68a624..eddd355d 100644
+index 6e68a62..0469e98 100644
 --- a/packages/subagent/tool-subagent/src/index.ts
 +++ b/packages/subagent/tool-subagent/src/index.ts
 @@ -10,7 +10,7 @@ import type { Context } from '@deepseek-ai/cordis'
@@ -117,23 +117,25 @@ index 6e68a624..eddd355d 100644
  import {
    delegationModelRequest,
    hasConfiguredLlmSelection,
-@@ -57,6 +57,7 @@ export interface Config extends PresetSelectionConfig {
+@@ -57,6 +57,8 @@ export interface Config extends PresetSelectionConfig {
     * Host setting, or restricts explicit selection to the current parent route.
     */
    modelSelection?: boolean
 +  grigdeskForeground?: boolean
++  grigdeskBackground?: boolean
    /**
     * Register the shared `list_subagent_models` tool for this scope.
     * Enable on only one instance per scope; defaults to false and does not
-@@ -84,6 +85,7 @@ export const Config: z<Config> = z.object({
+@@ -84,6 +86,8 @@ export const Config: z<Config> = z.object({
    provider: z.string().required(),
    toolName: z.string().default('subagent'),
    modelSelection: z.boolean().default(false),
 +  grigdeskForeground: z.boolean().default(false),
++  grigdeskBackground: z.boolean().default(false),
    modelDiscovery: z.boolean().default(false),
    // Prevent Schemastery from materializing omitted agentOptions as `{}`.
    agentOptions: z.object({
-@@ -102,6 +104,119 @@ export const Config: z<Config> = z.object({
+@@ -102,6 +106,125 @@ export const Config: z<Config> = z.object({
    maxDepth: z.union([z.natural().max(Number.MAX_SAFE_INTEGER), z.const('provider-managed' as const)]),
  })
  
@@ -198,19 +200,25 @@ index 6e68a624..eddd355d 100644
 +  readonly output: JsonValue[]
 +}
 +
++type ScopedToolResult = ForegroundToolResult
++  | { readonly kind: 'activation'; readonly runId: string; readonly name: string }
++
 +const foregroundOutput = {
 +  schema: {
 +    type: 'object',
 +    additionalProperties: false,
 +    properties: {
-+      kind: { type: 'string', required: true, const: 'foreground' },
++      kind: { type: 'string', required: true, enum: ['foreground', 'activation'] },
 +      runId: { type: 'string', required: true },
-+      output: { type: 'array', required: true, items: { type: 'json' } },
++      output: { type: 'array', items: { type: 'json' } },
++      name: { type: 'string' },
 +    },
 +  },
-+  render: (_args: unknown, value: ForegroundToolResult) =>
-+    [{ type: 'text' as const, text: outputValueText(value.output) }],
-+  presentationMeta: (_args: unknown, value: ForegroundToolResult) =>
++  render: (_args: unknown, value: ScopedToolResult) => [{
++    type: 'text' as const,
++    text: value.kind === 'foreground' ? outputValueText(value.output) : `started subagent ${value.name}`,
++  }],
++  presentationMeta: (_args: unknown, value: ScopedToolResult) =>
 +    ({ kind: value.kind, runId: value.runId }),
 +} as const
 +
@@ -253,20 +261,41 @@ index 6e68a624..eddd355d 100644
  /**
   * Model-facing wording from the provider's conversation-history descriptor
   * ({@link SubagentProvider.inheritsParentContext}).
-@@ -161,6 +276,12 @@ export function apply(ctx: Context, config: Config): void {
+@@ -161,6 +284,13 @@ export function apply(ctx: Context, config: Config): void {
    if (config.maxDepth !== 'provider-managed') assertSubagentMaxDepth(config.maxDepth)
    const toolName = config.toolName ?? 'subagent'
  
 +
 +  const foreground = config.grigdeskForeground === true
++  const background = config.grigdeskBackground === true
 +  if (foreground && (!['spawn', 'fork'].includes(config.provider)
-+    || config.modelSelection || config.modelDiscovery || config.agentOptions || presets.configured)) {
++    || config.agentOptions || presets.configured)) {
 +    throw new Error('Некорректная конфигурация foreground-инструмента GrigDesk')
 +  }
    const modelSelectionEnabled = config.modelSelection === true
  
    const assertSubagentProviderConfiguration = (subagentProvider: SubagentProvider): void => {
-@@ -205,8 +326,147 @@ export function apply(ctx: Context, config: Config): void {
+@@ -191,7 +321,18 @@ export function apply(ctx: Context, config: Config): void {
+   const initialProvider = ctx.subagents.getProvider(config.provider)
+   if (initialProvider !== undefined) assertSubagentProviderConfiguration(initialProvider)
+ 
+-  if (config.modelDiscovery === true) registerListSubagentModels(ctx)
++  // В закрытом профиле разрешённый каталог берётся из единственного маршрута GLM.
++  // Принадлежность каталогу проверяется до создания дочерней сессии.
++  const glmRoutes = foreground && modelSelectionEnabled ? async () => {
++    const llm = ctx.get('llm')
++    if (llm === undefined) {
++      throw new ToolContextUnavailableError('Каталог дочерних моделей GLM недоступен')
++    }
++    const models = await llm.listModels('zai')
++    return models.map(model => ({ provider: 'zai', model: model.id }))
++  } : undefined
++
++  if (config.modelDiscovery === true) registerListSubagentModels(ctx, glmRoutes)
+ 
+   // Load order and HMR replacement can change provider availability while
+   // this fiber remains active.
+@@ -205,8 +346,151 @@ export function apply(ctx: Context, config: Config): void {
        : 'your current model and reasoning effort'
      // Discovery visibility is per Agent; only a same-instance owner is known to exist at mount.
      const providerSource = config.modelDiscovery === true ? ' Use a provider id listed by `list_subagent_models`.' : ''
@@ -316,22 +345,18 @@ index 6e68a624..eddd355d 100644
 +      },
 +    } as const
 +    const foregroundParameters = {
-+      description: parameters.description,
-+      prompt: parameters.prompt,
-+      run_in_background: { type: 'boolean' },
++      ...activationParameters,
++      run_in_background: {
++        type: 'boolean',
++        ...background ? {} : { const: false },
++        description: background
++          ? 'Set true to start in the background. Omit or pass false to wait for the result.'
++          : 'Omit or pass false. The call waits for the result.',
++      },
 +    } as const
-+    const start = async (args: InferArgs<typeof activationParameters>, exec: ToolRunContext) => {
-+      if (foreground) {
-+        const raw = exec.arguments
-+        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-+          throw new Error('Foreground delegation requires an object')
-+        }
-+        const input = raw as Record<string, unknown>
-+        if (Object.keys(input).some((key) => !['description', 'prompt', 'run_in_background'].includes(key))
-+          || Object.hasOwn(input, 'run_in_background') && input.run_in_background !== false) {
-+          throw new Error('Foreground delegation accepts only a description, prompt, and optional run_in_background=false')
-+        }
-+      }
++    const start = async (
++      args: InferArgs<typeof activationParameters>, exec: ToolRunContext, wait = false,
++    ) => {
 +      const parent = exec.agent
 +      if (!parent) {
 +        // Non-agent callers provide no parent for delegation ownership.
@@ -341,7 +366,7 @@ index 6e68a624..eddd355d 100644
 +      const agentPreset = presets.resolve(args as PresetSelectionRequest)
 +      const modelRequest = delegationModelRequest(args as DelegationModelRequest)
 +      const routes = modelSelectionEnabled && hasDelegationModelRequest(modelRequest)
-+        ? ctx.get('subagentModelSelection')?.allowedRoutes()
++        ? (glmRoutes === undefined ? ctx.get('subagentModelSelection')?.allowedRoutes() : await glmRoutes())
 +        : undefined
 +      const modelSelectionPolicy = routes === undefined ? undefined : { routes }
 +      const parentOptions = parentAgentOptionsForDelegation(parent)
@@ -394,8 +419,8 @@ index 6e68a624..eddd355d 100644
 +        ...args.name === undefined ? {} : { name: args.name },
 +        ...request,
 +        signal: exec.signal,
-+        delivery: foreground ? 'caller' : 'parent',
-+        ...foreground ? { grigdeskOneShot: true as const } : {},
++        delivery: wait ? 'caller' : 'parent',
++        ...wait ? { grigdeskOneShot: true as const } : {},
 +      })
 +    }
 +    const common = {
@@ -404,18 +429,26 @@ index 6e68a624..eddd355d 100644
 +    }
 +    const definition = foreground ? defineTool({
 +      ...common,
-+      description: wording.description + ' This call waits for the answer from the child.',
++      description: wording.description + (background
++        ? ' Wait for the answer or start a continuable child in the background.'
++        : ' This call waits for the answer from the child.'),
 +      parameters: foregroundParameters,
 +      output: foregroundOutput,
 +      async execute(args, exec) {
-+        return settleForeground(await start(args, exec), exec.signal)
++        const wait = args.run_in_background !== true
++        const started = await start(args, exec, wait)
++        if (wait) {
++          return settleForeground(started, exec.signal)
++        }
++
++        return { kind: 'activation' as const, runId: started.childId, name: started.name }
 +      },
 +    }) : defineTool({
 +      ...common,
        description: wording.description
          + ' This tool starts an independently managed subagent and immediately returns its name. If you are still online when it finishes, the runtime automatically delivers its completion notice. The notice includes the final answer unless the child sent you a message just before finishing.'
          + (subagentProvider.prepareContinuable !== undefined
-@@ -215,46 +475,7 @@ export function apply(ctx: Context, config: Config): void {
+@@ -215,46 +499,7 @@ export function apply(ctx: Context, config: Config): void {
          + (modelSelectionEnabled && subagentProvider.inheritsParentContext
            ? ' Changing the route can prevent provider-side reuse of the inherited conversation prefix.'
            : ''),
@@ -463,7 +496,7 @@ index 6e68a624..eddd355d 100644
        output: {
          schema: {
            type: 'object',
-@@ -267,72 +488,8 @@ export function apply(ctx: Context, config: Config): void {
+@@ -267,72 +512,8 @@ export function apply(ctx: Context, config: Config): void {
          render: (_args, value) => [{ type: 'text', text: `started subagent ${value.name}` }],
          presentationMeta: (_args, value) => ({ kind: value.kind, name: value.name }),
        },
@@ -537,11 +570,74 @@ index 6e68a624..eddd355d 100644
          return { kind: 'activation' as const, name: started.name }
        },
      })
-@@ -376,6 +533,7 @@ export function apply(ctx: Context, config: Config): void {
+@@ -376,6 +557,9 @@ export function apply(ctx: Context, config: Config): void {
          .sort()
        if (visible[0] !== toolName) return ''
        const names = visible.map(name => `\`${name}\``).join(' or ')
-+      if (foreground) return `Use ${names} for scoped delegation. Each call completes with the child's answer.`
++      if (foreground) {
++        return `Use ${names} for scoped delegation. Omit run_in_background to wait for the child's answer.`
++      }
        return `Start independent delegations with ${names} together in one assistant message and continue useful work while they run. The concurrency limit of all the subagents is ${ctx.subagents.maxActiveSubagents}. When only waiting for their results remains, end your turn instead of sleeping or polling; the next result starts a new turn. Collect the subagent results required to complete the task before giving the user a final answer.\n\nBash, formatters, code generators, and scripts can overwrite concurrent edits without conflict detection; coordinate their changes explicitly. The agent integrating the work must review the final diff and run relevant tests.`
      },
    })
+diff --git a/packages/subagent/tool-subagent/src/list-models.ts b/packages/subagent/tool-subagent/src/list-models.ts
+index e020506..6b27ed8 100644
+--- a/packages/subagent/tool-subagent/src/list-models.ts
++++ b/packages/subagent/tool-subagent/src/list-models.ts
+@@ -6,7 +6,7 @@ import type { LlmProviderInfo } from '@deepseek-ai/dsh-llm'
+ import { defineTool, ToolArgsError, ToolContextUnavailableError } from '@deepseek-ai/dsh-tools'
+ import { parentAgentOptionsForDelegation, SubagentError } from '@deepseek-ai/dsh-subagent'
+ import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
+-import type { ModelSelectionPolicy } from './model-selection.ts'
++import type { AllowedModelRoute, ModelSelectionPolicy } from './model-selection.ts'
+ import type {} from './model-selection-settings.ts'
+ import { hasText } from './model-selection.ts'
+ 
+@@ -41,9 +41,10 @@ async function listSubagentModels(
+   ctx: Context,
+   request: ListSubagentModelsRequest,
+   exec: ToolRunContext,
++  catalog?: () => Promise<AllowedModelRoute[]>,
+ ): Promise<string> {
+   if (exec.agent === undefined) throw new ToolContextUnavailableError('list_subagent_models requires a calling agent')
+-  const routes = ctx.get('subagentModelSelection')?.allowedRoutes()
++  const routes = catalog === undefined ? ctx.get('subagentModelSelection')?.allowedRoutes() : await catalog()
+   let policy = routes === undefined ? undefined : { routes }
+   const selectionEnabled = policy !== undefined
+   if (policy === undefined) {
+@@ -98,7 +99,9 @@ async function listSubagentModels(
+  * Register discovery of the child models the Host setting authorizes.
+  * @param ctx - Context carrying the tool registry, LLM service, and optional Host model-selection setting.
+  */
+-export function registerListSubagentModels(ctx: Context): void {
++export function registerListSubagentModels(
++  ctx: Context, catalog?: () => Promise<AllowedModelRoute[]>,
++): void {
+   ctx.tools.register(defineTool({
+     name: 'list_subagent_models',
+     description:
+@@ -124,7 +127,7 @@ export function registerListSubagentModels(ctx: Context): void {
+       return listSubagentModels(ctx, {
+         ...hasText(args.provider) ? { provider: args.provider } : {},
+         ...hasText(args.model) ? { model: args.model } : {},
+-      }, exec)
++      }, exec, catalog)
+     },
+   }))
+ }
+diff --git a/packages/interaction/user-questions/src/index.ts b/packages/interaction/user-questions/src/index.ts
+--- a/packages/interaction/user-questions/src/index.ts
++++ b/packages/interaction/user-questions/src/index.ts
+@@ -141,7 +141,11 @@
+         'human interaction requires the exact live calling agent when an agent is supplied',
+         'CALLER_NOT_LIVE')
+     }
+-    if (agent.session.header.origin === 'subagent') {
++    // Встроенный хост может адресовать запрос проверенному владельцу дерева.
++    // Без такого канала обычный контракт делегированного запроса не меняется.
++    const canRoute = this.ctx.get('grigdeskAllowChildQuestions' as never) as
++      ((owner: Agent) => boolean) | undefined
++    if (agent.session.header.origin === 'subagent' && canRoute?.(agent) !== true) {
+       throw new UserQuestionError(
+         'human interaction is unavailable while the calling agent is owned by another live agent; '
+         + "include the unresolved question or decision in the child agent's final result",
