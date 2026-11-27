@@ -1,8 +1,8 @@
 diff --git a/packages/acp/acp/src/index.ts b/packages/acp/acp/src/index.ts
-index 792ec6a4..d11e9ef8 100644
+index 792ec6a..8bc45d2 100644
 --- a/packages/acp/acp/src/index.ts
 +++ b/packages/acp/acp/src/index.ts
-@@ -54,11 +54,22 @@ import { AcpMcpConfigError } from './mcp.ts'
+@@ -54,11 +54,28 @@ import { AcpMcpConfigError } from './mcp.ts'
  import { AcpModelConfigError } from './model-control.ts'
  import { AcpSession } from './session.ts'
  
@@ -12,7 +12,13 @@ index 792ec6a4..d11e9ef8 100644
 +  interface Context {
 +    grigdeskAcpSettingsBridge: {
 +      capabilities: Record<string, { contract: number }>
-+      configure(app: ReturnType<typeof createAcpAgentApp>): void
++      configure(
++        app: ReturnType<typeof createAcpAgentApp>,
++        owner: {
++          agent(sessionId: SessionId): AcpSession['agent'] | undefined
++          client(): AgentContext
++        },
++      ): void
 +    }
 +  }
 +}
@@ -26,7 +32,7 @@ index 792ec6a4..d11e9ef8 100644
  
  /** Preserve invalid-parameter detail in the SDK wire error message. */
  function invalidParams(detail: string): RequestError {
-@@ -96,6 +107,7 @@ export const Config: Schema<AcpConfig> = Schema.object({
+@@ -96,6 +113,7 @@ export const Config: Schema<AcpConfig> = Schema.object({
  export function apply(ctx: Context, config: AcpConfig): void {
    // ACP handlers execute outside this plugin's injection scope, so capture the
    // injected service during apply rather than reading it lazily in a callback.
@@ -34,7 +40,7 @@ index 792ec6a4..d11e9ef8 100644
    const persistence = ctx.sessionPersistence
    const logger = ctx.logger
    const sessionListPageSize = resolveSessionListPageSize(config.sessionListPageSize)
-@@ -184,6 +196,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
+@@ -184,6 +202,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
          protocolVersion: PROTOCOL_VERSION,
          agentInfo: { name: 'deepseek-harness-acp', version: '0.0.1' },
          agentCapabilities: {
@@ -42,11 +48,14 @@ index 792ec6a4..d11e9ef8 100644
            mcpCapabilities: { http: true },
            promptCapabilities: { image: imagePromptEnabled, audio: false, embeddedContext: false },
            sessionCapabilities: { close: {}, list: {}, resume: {} },
-@@ -388,6 +401,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
+@@ -388,6 +407,10 @@ export function apply(ctx: Context, config: AcpConfig): void {
      .onRequest(methods.agent.session.setConfigOption, ({ params, signal }) => implementation.setSessionConfigOption(params, signal))
      .onRequest(methods.agent.session.prompt, ({ params, signal }) => implementation.prompt(params, signal))
      .onNotification(methods.agent.session.cancel, ({ params }) => implementation.cancel(params))
-+  grigdeskSettings.configure(app)
++  grigdeskSettings.configure(app, {
++    agent: id => sessions.get(id)?.agent,
++    client: () => conn,
++  })
    const connection = app.connect(stream)
    const conn: AgentContext = connection.client
  

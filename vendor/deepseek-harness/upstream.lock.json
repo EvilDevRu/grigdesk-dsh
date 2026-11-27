@@ -6251,7 +6251,7 @@
   "patches": [
     {
       "path": "acp-settings-bridge.patch",
-      "sha256": "ef1da669d8a0d12fc737556f1b02b5b99b37d8e2188b859940f4ecd1353813f4"
+      "sha256": "0c7a4f51a6afd4aa9759099586ddf5c7f161de1ed24e9e9a7b4abb2511245208"
     },
     {
       "path": "embedded-settings-profile.patch",
@@ -6264,6 +6264,10 @@
     {
       "path": "glm-mcp-stdio-launch.patch",
       "sha256": "374fbc6024b1b0c5290d5f8919940a1b753f410e2918ab701bee64dff1316eec"
+    },
+    {
+      "path": "glm-schedule-session.patch",
+      "sha256": "65ea173879ea8dff09c65ba27924f8e5790cd0480c228ae99752259a9411ce80"
     },
     {
       "path": "glm-v3-journal-events.patch",

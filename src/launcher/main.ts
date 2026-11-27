@@ -5,7 +5,11 @@ import { getRawAsset } from 'node:sea';
 import { decodeDeepSeekRuntimeInfo } from '../../lib/chat/deepSeekBinary.ts';
 import { sha256 } from '../../lib/node/hash.ts';
 import { launcherFailure, parseLauncherArgs } from './args.ts';
+import { applyCredentials } from './credentials.ts';
+import { chatHelp, parseChatOptions } from './chatProfile.ts';
 import { materializePayload, resolveExtractionCache } from './extract.ts';
+import { runLogin } from './login.ts';
+import { runTerminalChat } from './terminalChat.ts';
 import { runLauncherWorker } from './worker.ts';
 
 /**
@@ -42,6 +46,8 @@ async function main(): Promise<void> {
 
   if (args.mode === 'help') {
     process.stdout.write('DeepSeek Harness для GrigDesk\n'
+      + 'chat [--help] — интерактивный чат в терминале\n'
+      + 'login [deepseek|glm|qwen] [--status] | logout [подключение|--all] — ключи в ~/.deepseek\n'
       + '--runtime-info --json | --verify --json | -V | --license\n'
       + '--cache-dir <абсолютный путь> --expect-package-id <SHA256> [аргументы Harness]\n');
 
@@ -51,6 +57,51 @@ async function main(): Promise<void> {
   if (args.mode === 'license') {
     process.stdout.write(Buffer.from(getRawAsset('NODE-LICENSE')).toString('utf8'));
     process.stdout.write('\nПолный набор notices Harness встроен в generation/licenses/index.json.\n');
+
+    return;
+  }
+
+  // Ключи чата: окружение терминала → ~/.deepseek/credentials.json (login) → .env GrigDesk.
+  // Явные переменные не перекрываются; дальше профиль читает их как раньше.
+  if (args.mode === 'run' && ['login', 'logout'].includes(args.harnessArgs[0] ?? '')) {
+    const [command, ...rest] = args.harnessArgs;
+
+    try {
+      process.exitCode = await runLogin(command === 'logout' ? ['logout', ...rest] : rest, {
+        stdin: process.stdin, stdout: process.stdout, env: process.env,
+      });
+    } catch (error) {
+      process.stderr.write(`${(error as Error).message}\n`);
+      process.exitCode = 2;
+    }
+
+    return;
+  }
+
+  if (args.mode === 'run' && (args.harnessArgs[0] === 'chat'
+    || args.harnessArgs.length === 0 && process.stdin.isTTY && process.stdout.isTTY)) {
+    try {
+      const options = parseChatOptions(args.harnessArgs.slice(1));
+
+      if (options.help) {
+        process.stdout.write(`${chatHelp}\n`);
+      } else {
+        // Дочерний launcher получает только allowlist окружения профиля и не видит GRIGDESK_HOME,
+        // поэтому путь распаковки считает родитель — тот же, что и у обычного run-режима.
+        const inherited = [
+          '--expect-package-id', info.packageId,
+          '--cache-dir', resolveExtractionCache(args.cacheDir ?? undefined, {
+            env: process.env, home: os.homedir(),
+          }),
+        ];
+
+        await applyCredentials(process.env);
+        process.exitCode = await runTerminalChat(options, inherited);
+      }
+    } catch (error) {
+      process.stderr.write(`${(error as Error).message}\n`);
+      process.exitCode = 2;
+    }
 
     return;
   }

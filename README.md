@@ -27,7 +27,8 @@
 </p>
 
 <p align="center">
-  This distribution bundles <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a>,
+  One executable for DeepSeek, GLM (Z.ai), and Qwen in the terminal.<br>
+  It bundles <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a>,
   a pinned Node.js runtime, and the ACP and web integrations for GrigDesk.
 </p>
 
@@ -66,6 +67,15 @@ For Linux ARM64, use `deepseek-linux-arm64` in the commands above. On macOS, use
 `deepseek-darwin-arm64` for the executable.
 
 </details>
+
+## Терминальный чат
+
+При первом запуске добавьте ключ через `deepseek login` или задайте переменную окружения своего подключения.
+Для ручной установки укажите путь к бинарнику,
+например `./deepseek-linux-x64 login` для настройки ключа и `./deepseek-linux-x64 chat` для чата.
+Выберите подключение и режим доступа стрелками или левым кликом. Колесо мыши и `PgUp`/`PgDn` листают историю.
+По умолчанию сессии и настройки чата хранятся в `~/.deepseek/cli/`. `/model` меняет модель, а `/effort`
+выбирает уровень рассуждения, если модель его поддерживает. [Настройка чата](docs/development.md#терминальный-чат)
 
 ## Updates and compatibility
 

@@ -1,0 +1,59 @@
+diff --git a/packages/schedule/schedule/src/index.ts b/packages/schedule/schedule/src/index.ts
+--- a/packages/schedule/schedule/src/index.ts
++++ b/packages/schedule/schedule/src/index.ts
+@@ -346,6 +346,11 @@
+     await this.initialized
+   }
+ 
++  /** Reconsider due deliveries when an embedded client attaches its Session. */
++  notifySessionAvailable(): void {
++    this.runtime?.requestDrive()
++  }
++
+   /** Read effective delivery limits without loading or activating a task.
+    * @returns The configured minimum spacing between deliveries that each create a Session, in seconds.
+    */
+@@ -412,9 +417,11 @@
+    * @param request - Optional activity filter, page size, and offset.
+    * @returns The requested page and total matching task count.
+    */
+-  async list(request: ScheduleListRequest = {}): Promise<ScheduleListResult> {
++  async list(request: ScheduleListRequest = {}, targetSessionId?: SessionId): Promise<ScheduleListResult> {
+     const { limit, offset } = resolveListPage(request)
+     const items = (await this.entries())
++      .filter(entry => targetSessionId === undefined
++        || (entry.target.kind === 'session' && entry.target.sessionId === targetSessionId))
+       .filter(entry => request.active === undefined || (entry.status === 'active') === request.active)
+     const page = items.slice(offset, offset + limit)
+     return { items: page, shown: page.length, total: items.length, limit, offset }
+diff --git a/packages/schedule/tool-schedule/src/index.ts b/packages/schedule/tool-schedule/src/index.ts
+--- a/packages/schedule/tool-schedule/src/index.ts
++++ b/packages/schedule/tool-schedule/src/index.ts
+@@ -31,6 +31,12 @@
+   ScheduleCatalogEntry, ScheduleDeliveryReceipt, ScheduleRecord, SubagentSessionError,
+ } from '@deepseek-ai/dsh-schedule'
+ import { brandString } from '@deepseek-ai/dsh-brand'
++
++declare module '@deepseek-ai/cordis' {
++  interface Context {
++    grigdeskScheduleSessionOnly: boolean
++  }
++}
+ 
+ /** Plugin name registered with the Loader. */
+ export const name = 'tool-schedule'
+@@ -413,11 +419,12 @@
+     isConcurrencySafe: () => true,
+     execute({ active, limit, offset }, exec) {
+       // The open parameter root admits unknown keys; only the declared page fields select the Host-wide list.
+-      return runForCaller(exec, LIST_ERRORS, () => ctx.schedule.list({
++      return runForCaller(exec, LIST_ERRORS, (agent) => ctx.schedule.list({
+         ...(active === undefined ? {} : { active }),
+         ...(limit === undefined ? {} : { limit }),
+         ...(offset === undefined ? {} : { offset }),
+-      }).then(page => ({ ...page, items: page.items.map(modelTask) })))
++      }, ctx.get('grigdeskScheduleSessionOnly') ? agent.session.id : undefined)
++        .then(page => ({ ...page, items: page.items.map(modelTask) })))
+     },
+     presentCall: () => present('List scheduled tasks', 'read'),
+   }))
