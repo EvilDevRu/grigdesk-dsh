@@ -91,6 +91,9 @@ jobs:
           xcrun --sdk macosx --show-sdk-path
           node scripts/prepareDarwinTools.mts "$RUNNER_TEMP/dsh-darwin-tools" >> "$GITHUB_ENV"
       - name: Сборка и полная проверка ELF
+        env:
+          # diag: сырые причины launcher видны только в журнале сборки
+          GRIGDESK_DSH_LAUNCHER_TRACE: "1"
         run: |
           node scripts/buildBinary.mts --out-dir "$GRIGDESK_DSH_CACHE/out" --node-cache-dir "$GRIGDESK_DSH_CACHE/node-cache"
           node scripts/verify.mts --binary "$GRIGDESK_DSH_CACHE/out/deepseek"

@@ -113,7 +113,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     await buildDeepSeekBinary(parsed).then((info) => {
       process.stdout.write(`${JSON.stringify(info)}\n`);
     }, (error: unknown) => {
-      process.stderr.write(`Сборка DeepSeek не удалась: ${(error as Error).message}\n`);
+      const failure = error as Error & { stderr?: string; stdout?: string };
+
+    process.stderr.write(`Сборка DeepSeek не удалась: ${failure.message}\n`);
+
+    // stderr ELF в smoke — диагностический JSON самого launcher, без ключей пользователя.
+    if (failure.stderr) {
+      process.stderr.write(`launcher stderr:\n${failure.stderr}\n`);
+    }
       process.exitCode = 1;
     });
   }

@@ -76,7 +76,9 @@ async function main(): Promise<void> {
 
   if (args.mode === 'verify') {
     if (result.code !== 0 || result.stderr !== '') {
-      throw new Error('Worker отказал в проверке');
+      // Результат worker остаётся на объекте ошибки: трассировка ниже печатает его
+      // только по явному флагу, обычный вывод launcher по-прежнему скрывает сырые детали.
+      throw Object.assign(new Error('Worker отказал в проверке'), { worker: result });
     }
 
     const verified = JSON.parse(result.stdout);
@@ -96,10 +98,30 @@ async function main(): Promise<void> {
   process.exitCode = result.code;
 }
 
+/**
+ * Диагностика включается только переменной сборки/CI: stdout и stderr пользователя
+ * и его окружение в обычный вывод не попадают, как и раньше.
+ */
+function writeLauncherTrace(error: unknown): void {
+  if (process.env.GRIGDESK_DSH_LAUNCHER_TRACE !== '1') {
+    return;
+  }
+
+  const trace = error as Error & { worker?: { code: number | null; stdout: string; stderr: string } };
+
+  process.stderr.write(`launcher trace: ${trace.stack ?? String(trace)}\n`);
+
+  if (trace.worker) {
+    process.stderr.write(`launcher worker code=${trace.worker.code}\nstdout:\n${trace.worker.stdout}\n`
+      + `stderr:\n${trace.worker.stderr}\n`);
+  }
+}
+
 void main().catch((error: unknown) => {
   const metadata = process.argv.slice(2).some((arg) => arg === '--runtime-info' || arg === '--verify');
   const result = launcherFailure(error, metadata);
 
+  writeLauncherTrace(error);
   process.stderr.write(result.stderr);
   process.exitCode = result.exitCode;
 });
