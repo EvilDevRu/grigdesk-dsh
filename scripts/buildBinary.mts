@@ -49,6 +49,17 @@ async function bundle(work: string): Promise<void> {
  * Реальные run/postject/download принадлежат builder, тестовый execute API внедряет их отдельно.
  * Публикация разрешена лишь после metadata и полного --verify собственным обычным Node.
  */
+/**
+ * Пробы ELF идут без PATH и ключей; единственное исключение — диагностический флаг
+ * трассировки самого launcher, чтобы журнал сборки показал причину отказа worker.
+ */
+function smokeEnvironment(): NodeJS.ProcessEnv {
+  return {
+    PATH: '',
+    ...(process.env.GRIGDESK_DSH_LAUNCHER_TRACE ? { GRIGDESK_DSH_LAUNCHER_TRACE: '1' } : {}),
+  };
+}
+
 export async function buildDeepSeekBinary(options: BinaryBuildOptions) {
   const target = seaHostTarget();
   const manifest = JSON.parse(await readFile(path.join(packageDir, 'package.json'), 'utf8'));
@@ -79,7 +90,7 @@ export async function buildDeepSeekBinary(options: BinaryBuildOptions) {
       });
     },
     smoke: async (binary, expected, work) => {
-      const result = await run(binary, ['--runtime-info', '--json'], { env: { PATH: '' }, timeout: 30000 });
+      const result = await run(binary, ['--runtime-info', '--json'], { env: smokeEnvironment(), timeout: 30000 });
       const info = decodeDeepSeekRuntimeInfo(JSON.parse(result.stdout));
 
       if (info.packageId !== expected.packageId || info.platform !== process.platform
@@ -89,7 +100,7 @@ export async function buildDeepSeekBinary(options: BinaryBuildOptions) {
 
       const verifyArgs = ['--cache-dir', path.join(work, 'smoke-cache'), '--verify', '--json'];
       const verified = await run(binary, verifyArgs, {
-        env: { PATH: '' },
+        env: smokeEnvironment(),
         timeout: 120000,
         maxBuffer: 65536,
       });
