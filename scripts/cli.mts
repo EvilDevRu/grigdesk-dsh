@@ -446,6 +446,16 @@ async function release({ values, repeated, flags }: Parsed): Promise<void> {
   }
 
   ghArgs.push(...(notes ? ['--notes-file', notes] : ['--generate-notes']));
+
+  // Перевешанный тег (rc пересобирается) оставляет прежний Release: он заменяется целиком,
+  // чтобы active assets всегда соответствовали коммиту тега.
+  const existing = await command('gh', ['release', 'view', tag, '--json', 'tagName']).then((code) => code === 0,
+    () => false);
+
+  if (existing) {
+    await ensureCode(await command('gh', ['release', 'delete', tag, '--yes']), 'замена прежнего Release');
+  }
+
   await ensureCode(await command('gh', ghArgs), 'создание GitHub Release');
   await ensureCode(await command('gh', ['release', 'upload', tag, ...uploaded, '--clobber']), 'загрузка активов');
   process.stdout.write(`Опубликован ${tag}: ${uploaded.length} файлов из ${staging}\n`);
