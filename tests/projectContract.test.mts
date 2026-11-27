@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -48,8 +50,23 @@ test('пакет DeepSeek закрепляет свои build deps без runtim
   assert.equal(manifest.scripts.build, 'node scripts/buildBinary.mts');
   assert.equal(manifest.scripts.test, 'node scripts/test.mts');
   assert.equal(manifest.scripts.cli, 'node scripts/cli.mts');
-  assert.equal(manifest.bin['grigdesk-dsh'], 'bin/grigdesk-dsh');
+  assert.deepEqual(manifest.bin, { 'grigdesk-dsh-ctl': 'bin/grigdesk-dsh-ctl' });
+  assert.deepEqual(lock.packages[''].bin, manifest.bin);
   assert.equal(manifest.scripts.verify, 'node scripts/verify.mts');
+});
+
+test('команда grigdesk-dsh-ctl работает через символическую ссылку npm', async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'dsh-ctl-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+
+  const launcher = fileURLToPath(new URL('../bin/grigdesk-dsh-ctl', import.meta.url));
+  const link = path.join(directory, 'grigdesk-dsh-ctl');
+  await symlink(path.relative(directory, launcher), link);
+
+  const exec = promisify(execFile);
+  const { stdout } = await exec(link, ['help'], { cwd: directory });
+
+  assert.match(stdout, /Использование: grigdesk-dsh-ctl <команда>/u);
 });
 
 test('package runner отвергает неизвестные параметры до запуска набора тестов', async () => {

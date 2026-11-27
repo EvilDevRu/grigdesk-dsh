@@ -13,9 +13,9 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const HOST_CONTRACT = path.join(ROOT, 'contracts/grigdesk-host-contract.json');
 const MANIFEST_FORMAT = 1;
 
-const HELP = `grigdesk-dsh — сборка, проверка, допуск и установка DeepSeek Harness для GrigDesk
+const HELP = `grigdesk-dsh-ctl — сборка, проверка, допуск и установка DeepSeek Harness для GrigDesk
 
-Использование: grigdesk-dsh <команда> [аргументы]
+Использование: grigdesk-dsh-ctl <команда> [аргументы]
 
   build     Собрать ELF: зависимости → pinned Node → снимок upstream → сборка → verify → допуск
             [--out-dir <каталог>] [--binary-version <версия>] [--require-admission] [--cache-dir <каталог>]
@@ -191,7 +191,8 @@ async function build({ values, flags }: Parsed): Promise<void> {
   ]);
 
   if (admission === 3) {
-    const hint = 'допуск GLM отсутствует — получите его: grigdesk-dsh admit --binary <ELF> --mode <режим> --admit';
+    const hint = 'допуск GLM отсутствует — получите его: '
+      + 'grigdesk-dsh-ctl admit --binary <ELF> --mode <режим> --admit';
 
     if (flags.has('--require-admission')) {
       throw new Error(`Собранный ELF без допуска: ${hint}`);

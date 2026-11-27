@@ -33,7 +33,7 @@ DeepSeek и GLM и ничего о сборке не знает.
 npm ci
 npm run prepare:runtime      # pinned worker Node 24.22.3 + runtime deps в ~/.cache/grigdesk-dsh
 npm run prepare:upstream      # снимок upstream Harness по upstream.lock.json
-bin/grigdesk-dsh build        # ELF → ~/.cache/grigdesk-dsh/out/deepseek
+bin/grigdesk-dsh-ctl build        # ELF → ~/.cache/grigdesk-dsh/out/deepseek
 ```
 
 `GRIGDESK_DSH_CACHE` задаёт абсолютный путь кэша вместо `~/.cache/grigdesk-dsh`.
@@ -52,7 +52,7 @@ bin/grigdesk-dsh build        # ELF → ~/.cache/grigdesk-dsh/out/deepseek
 
 2. локально:
    gh release download v1.2.0-rc.1 -p 'deepseek-linux-x64*' -D /tmp/dsh-rc
-   bin/grigdesk-dsh admit --binary /tmp/dsh-rc/deepseek-linux-x64 --mode api --admit
+   bin/grigdesk-dsh-ctl admit --binary /tmp/dsh-rc/deepseek-linux-x64 --mode api --admit
    → identity по --runtime-info ELF → живой smoke (3 хода, HTTP-ошибки Z.ai)
    → запись {mode, compatibility} в compatibility/glm.json
 
@@ -77,13 +77,15 @@ Identity допуска не зависит от платформы, пути и
 ## CLI
 
 ```
-grigdesk-dsh build      [--out-dir <каталог>] [--binary-version <версия>] [--require-admission]
-grigdesk-dsh verify     --binary <ELF>
-grigdesk-dsh admit      --binary <ELF> --mode api|coding-plan [--admit] [--force] [--model <модель>]
-grigdesk-dsh install    --binary <ELF> --target <путь> [--host-contract <файл>] [--releases-dir <каталог>] [--glm-mode <режим>]
-grigdesk-dsh release    --tag vX.Y.Z --binary <ELF> [--binary <ELF>...] [--prerelease] [--sidecar] [--notes <файл>]
-grigdesk-dsh prune      [--keep-builds N] [--keep-releases N]
-grigdesk-dsh check
+grigdesk-dsh-ctl build      [--out-dir <каталог>] [--binary-version <версия>] [--require-admission]
+grigdesk-dsh-ctl verify     --binary <ELF>
+grigdesk-dsh-ctl admit      --binary <ELF> --mode api|coding-plan [--admit] [--force] [--model <модель>]
+grigdesk-dsh-ctl install    --binary <ELF> --target <путь> [--host-contract <файл>]
+                           [--releases-dir <каталог>] [--glm-mode <режим>]
+grigdesk-dsh-ctl release    --tag vX.Y.Z --binary <ELF> [--binary <ELF>...]
+                           [--prerelease] [--sidecar] [--notes <файл>]
+grigdesk-dsh-ctl prune      [--keep-builds N] [--keep-releases N]
+grigdesk-dsh-ctl check
 ```
 
 `install` вызывает тот же установщик, что и GrigDesk: приватный staging, SHA256,
@@ -138,7 +140,7 @@ consumer-тесты GrigDesk против готового ELF (`GRIGDESK_DSH_TE
 
 ```bash
 npm run check:workflow     # YAML + bash -n каждого run-блока
-bin/grigdesk-dsh release --tag vX.Y.Z-test --binary <ELF> --sidecar --dry-run
+bin/grigdesk-dsh-ctl release --tag vX.Y.Z-test --binary <ELF> --sidecar --dry-run
 ```
 
 Правка публикации не требует пересборки: Actions → «Run workflow» с `run_id` готового

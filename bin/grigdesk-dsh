@@ -1,6 +1,0 @@
-#!/usr/bin/env sh
-# Тонкий launcher CLI grigdesk-dsh: запускает scripts/cli.mts репозитория Node из PATH.
-# Требования к среде (Node ^22.19 || >=24, npm, git, tar/xz, C compiler) описаны в README.md.
-set -eu
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-exec node "$ROOT/scripts/cli.mts" "$@"

@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+# Запускает CLI репозитория через Node из PATH.
+# Требования к среде (Node ^22.19 || >=24, npm, git, tar/xz, C compiler) описаны в README.md.
+set -eu
+
+# npm вызывает команду по ссылке. Корень репозитория считаем от самого файла.
+ENTRY="$0"
+while [ -L "$ENTRY" ]; do
+  TARGET="$(readlink "$ENTRY")"
+  case "$TARGET" in
+    /*) ENTRY="$TARGET" ;;
+    *) ENTRY="$(dirname "$ENTRY")/$TARGET" ;;
+  esac
+done
+
+ROOT="$(CDPATH= cd "$(dirname "$ENTRY")/.." && pwd)"
+exec node "$ROOT/scripts/cli.mts" "$@"

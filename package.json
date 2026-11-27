@@ -9,7 +9,7 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "bin": {
-    "grigdesk-dsh": "bin/grigdesk-dsh"
+    "grigdesk-dsh-ctl": "bin/grigdesk-dsh-ctl"
   },
   "devDependencies": {
     "@types/node": "22.20.1",

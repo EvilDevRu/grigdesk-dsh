@@ -11,7 +11,7 @@
 ## Что здесь принадлежит поставке
 
 - `compatibility/glm.json` — вход сборки. Допуск получается только живым smoke
-  локально (`grigdesk-dsh admit --admit`), в CI ключей нет.
+  локально (`grigdesk-dsh-ctl admit --admit`), в CI ключей нет.
 - `contracts/grigdesk-host-contract.json` — снимок контракта GrigDesk. Ревизии профиля
   и политики не хардкодятся: читаются из контракта.
 - Серверная политика GrigDesk (hooks, SSH/DB deny, approval) сюда не переносится:
@@ -21,7 +21,7 @@
 
 - Тесты — только через сторож: `npm test` (внутри `tests/run-node-tests-safe.sh`).
   Голый `node --test` память не ограничивает.
-- Перед сдачей: `grigdesk-dsh check` (typecheck, границы импортов, тесты).
+- Перед сдачей: `grigdesk-dsh-ctl check` (typecheck, границы импортов, тесты).
 - Сборка требует `prepare:runtime` и `prepare:upstream`; кэш — `GRIGDESK_DSH_CACHE`
   или `~/.cache/grigdesk-dsh`. Следи за местом на диске: generation занимает сотни МБ.
 - Живой smoke — только по явной просьбе человека: тратит квоту Z.ai.

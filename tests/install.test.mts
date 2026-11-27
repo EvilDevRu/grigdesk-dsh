@@ -354,7 +354,7 @@ test('CLI требует аргументы и предупреждает тол
   const { options, info } = await fixture(t);
   const args = ['--binary', options.binary, '--target', options.target,
     '--host-contract', options.hostContract, '--releases-dir', options.releasesDir];
-  // Установщик вызывается напрямую, как это делает `grigdesk-dsh install`:
+  // Установщик вызывается напрямую, как это делает `grigdesk-dsh-ctl install`:
   // npm как обёртка внутри test-раннера нестабильна и не является предметом проверки.
   const first = await run(process.execPath, [cli, ...args]);
 
