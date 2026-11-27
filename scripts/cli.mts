@@ -8,8 +8,10 @@ import { promisify } from 'node:util';
 import { decodeDeepSeekRuntimeInfo } from '../lib/chat/deepSeekBinary.ts';
 import { dshCacheHome, nodeCachePath } from '../lib/runtime/dshHome.ts';
 import { runCliMenu } from './cliMenu.mts';
+import { runCliAction, runSteps } from './cliProgress.mts';
 
 const run = promisify(execFile);
+const ENTRY = fileURLToPath(import.meta.url);
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const HOST_CONTRACT = path.join(ROOT, 'contracts/grigdesk-host-contract.json');
 const MANIFEST_FORMAT = 1;
@@ -162,11 +164,7 @@ async function build({ values, flags }: Parsed): Promise<void> {
   const cache = cacheHome(values);
   const outDir = path.resolve(values.get('--out-dir') ?? path.join(cache, 'out'));
   const nodeCache = nodeCachePath(cache);
-
-  await ensureCode(await command('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund']), 'зависимости пакета');
-  await ensureCode(await script('prepareRuntimeDeps.mts', ['--node-cache-dir', nodeCache]), 'подготовка pinned Node');
-  await ensureCode(await script('prepareUpstream.mts'), 'снимок upstream');
-
+  const binary = path.join(outDir, 'deepseek');
   const buildArgs = ['--out-dir', outDir, '--node-cache-dir', nodeCache];
 
   for (const flag of ['--binary-version', '--payload', '--vendor-dir']) {
@@ -177,33 +175,52 @@ async function build({ values, flags }: Parsed): Promise<void> {
     }
   }
 
-  await ensureCode(await script('buildBinary.mts', buildArgs), 'сборка ELF');
+  await runSteps([
+    ['Зависимости пакета', async () => {
+      const code = await command('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund']);
 
-  const binary = path.join(outDir, 'deepseek');
+      await ensureCode(code, 'зависимости пакета');
+    }],
+    ['Подготовка закреплённого Node.js', async () => {
+      const code = await script('prepareRuntimeDeps.mts', ['--node-cache-dir', nodeCache]);
 
-  await ensureCode(await script('verify.mts', ['--binary', binary]), 'проверка ELF');
-  await fs.writeFile(`${binary}.runtime-info.json`, (await run(binary, ['--runtime-info', '--json'], {
-    env: { PATH: '' },
-    timeout: 60000,
-    maxBuffer: 1 << 20,
-  })).stdout);
+      await ensureCode(code, 'подготовка pinned Node');
+    }],
+    ['Снимок DeepSeek Harness', async () => {
+      await ensureCode(await script('prepareUpstream.mts'), 'снимок upstream');
+    }],
+    ['Сборка ELF', async () => {
+      await ensureCode(await script('buildBinary.mts', buildArgs), 'сборка ELF');
+    }],
+    ['Проверка ELF и запись метаданных', async () => {
+      await ensureCode(await script('verify.mts', ['--binary', binary]), 'проверка ELF');
+      await fs.writeFile(`${binary}.runtime-info.json`, (await run(binary, ['--runtime-info', '--json'], {
+        env: { PATH: '' },
+        timeout: 60000,
+        maxBuffer: 1 << 20,
+      })).stdout);
+    }],
+    ['Проверка допуска GLM', async () => {
+      const admission = await script('admissionCheck.mts', [
+        '--binary', binary, '--mode', (await readHost()).glm.mode, '--host-contract', HOST_CONTRACT,
+      ]);
 
-  const admission = await script('admissionCheck.mts', [
-    '--binary', binary, '--mode', (await readHost()).glm.mode, '--host-contract', HOST_CONTRACT,
+      if (admission !== 3) {
+        await ensureCode(admission, 'проверка допуска');
+
+        return;
+      }
+
+      const hint = 'допуск GLM отсутствует — получите его: '
+        + 'grigdesk-dsh-ctl admit --binary <ELF> --mode <режим> --admit';
+
+      if (flags.has('--require-admission')) {
+        throw new Error(`Собранный ELF без допуска: ${hint}`);
+      }
+
+      process.stdout.write(`Внимание: ${hint}\n`);
+    }],
   ]);
-
-  if (admission === 3) {
-    const hint = 'допуск GLM отсутствует — получите его: '
-      + 'grigdesk-dsh-ctl admit --binary <ELF> --mode <режим> --admit';
-
-    if (flags.has('--require-admission')) {
-      throw new Error(`Собранный ELF без допуска: ${hint}`);
-    }
-
-    process.stdout.write(`Внимание: ${hint}\n`);
-  } else {
-    await ensureCode(admission, 'проверка допуска');
-  }
 
   process.stdout.write(`Готово: ${binary}\n`);
 }
@@ -496,9 +513,17 @@ async function prune({ values }: Parsed): Promise<void> {
  * Любой отказ останавливает цепочку — частично зелёный результат не сообщается.
  */
 async function check(): Promise<void> {
-  await ensureCode(await command('npm', ['run', '-s', 'typecheck']), 'typecheck');
-  await ensureCode(await script('checkImports.mts'), 'границы импортов');
-  await ensureCode(await script('test.mts'), 'тесты');
+  await runSteps([
+    ['Проверка типов', async () => {
+      await ensureCode(await command('npm', ['run', '-s', 'typecheck']), 'typecheck');
+    }],
+    ['Проверка границ импортов', async () => {
+      await ensureCode(await script('checkImports.mts'), 'границы импортов');
+    }],
+    ['Тесты со сторожем памяти', async () => {
+      await ensureCode(await script('test.mts'), 'тесты');
+    }],
+  ]);
 }
 
 const COMMANDS: Record<string, { spec: CommandSpec; run: (parsed: Parsed) => Promise<void> }> = {
@@ -562,11 +587,26 @@ async function runCommand(argv: string[]): Promise<void> {
   await entry.run(parseFlags(rest, entry.spec));
 }
 
+/**
+ * Явные build и check в терминале получают экран стадий, как и пункты меню.
+ * Дочерняя команда с журналом вместо TTY проходит сюда только один раз.
+ */
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  const interactive = process.stdin.isTTY && process.stdout.isTTY;
 
-  if (argv.length === 0 && process.stdin.isTTY && process.stdout.isTTY) {
-    process.exitCode = await runCliMenu(runCommand);
+  if (argv.length === 0 && interactive) {
+    process.exitCode = await runCliMenu(ENTRY, runCommand);
+
+    return;
+  }
+
+  const showProgress = interactive && process.stderr.isTTY && process.env.TERM !== 'dumb';
+
+  if (showProgress && (argv[0] === 'build' || argv[0] === 'check')) {
+    const title = argv[0] === 'build' ? 'Сборка поставки' : 'Проверка проекта';
+
+    process.exitCode = await runCliAction(ENTRY, argv, title);
 
     return;
   }
