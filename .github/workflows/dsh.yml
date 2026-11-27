@@ -45,6 +45,9 @@ jobs:
           node scripts/prepareRuntimeDeps.mts --node-cache-dir "$GRIGDESK_DSH_CACHE/node-cache"
           node scripts/prepareUpstream.mts
       - name: Тесты пакета через сторож памяти
+        # Сборки ELF-кандидатов тяжёлые: последовательно, чтобы группа не превысила бюджет RSS.
+        env:
+          GRIGDESK_DSH_TEST_CONCURRENCY: 1
         run: node scripts/test.mts
 
   build:

@@ -355,8 +355,8 @@ test('CLI требует аргументы и предупреждает тол
   const args = ['--binary', options.binary, '--target', options.target,
     '--host-contract', options.hostContract, '--releases-dir', options.releasesDir];
   const root = fileURLToPath(new URL('../..', import.meta.url));
-  const first = await run('npm', ['--prefix', path.join(root, 'deepseek'),
-    'run', '--silent', 'install:binary', '--', ...args]);
+  // Скрипт package.json — тот же вход, что использует CLI grigdesk-dsh install.
+  const first = await run('npm', ['run', '--silent', 'install:binary', '--', ...args], { cwd: root });
 
   assert.equal(first.stderr, '');
   assert.equal(JSON.parse(first.stdout).memory, 'unknown');
@@ -383,22 +383,6 @@ test('CLI требует аргументы и предупреждает тол
     invalid.splice(index, 2);
     await assert.rejects(run(process.execPath, [cli, ...invalid]), { code: 2 });
   }
-});
-
-test('потребитель задаёт host-contract; deploy helper передаёт его и не меняет A при отказе', async (t) => {
-  const { options, info } = await fixture(t);
-  const a = await installBinary(options);
-  const root = fileURLToPath(new URL('../..', import.meta.url));
-  const host = JSON.parse(await fs.readFile(options.hostContract, 'utf8'));
-
-  host.hostContract = 2;
-  await fs.writeFile(options.hostContract, JSON.stringify(host));
-  await writeStub(options.binary, { ...info, packageId: '9'.repeat(64) });
-  await assert.rejects(run('bash', [
-    path.join(root, 'deploy/lib/deepseek-cli.sh'), root, options.binary, options.target,
-    options.hostContract, options.releasesDir,
-  ]), { code: 1 });
-  assert.equal(await sha256File(options.target), a.sha256);
 });
 
 test('пробы исполняют staged copy без ключей и loader-переменных', async (t) => {

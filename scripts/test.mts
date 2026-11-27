@@ -22,7 +22,6 @@ async function main(): Promise<void> {
     root,
     runner: path.join(root, 'tests/run-node-tests-safe.sh'),
     directory: path.join(root, 'tests'),
-    sea: false,
   });
 }
 
