@@ -28,7 +28,7 @@ const HELP = `grigdesk-dsh — сборка, проверка, допуск и �
             [--glm-mode api|coding-plan]
   release   Опубликовать GitHub Release с ELF, manifest.json и sha256
             --tag vX.Y.Z --binary <ELF> [--binary <ELF>...] [--prerelease] [--notes <файл>]
-            [--min-server-version <версия GrigDesk>] [--sidecar]
+            [--min-server-version <версия GrigDesk>] [--sidecar] [--dry-run]
   prune     Чистка кэша поколений и резервных ELF
             [--cache-dir <каталог>] [--keep-builds N] [--keep-releases N]
   check     typecheck, границы импортов и тесты пакета
@@ -438,6 +438,19 @@ async function release({ values, repeated, flags }: Parsed): Promise<void> {
   await fs.writeFile(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
   uploaded.push(manifestFile);
 
+  if (flags.has('--dry-run')) {
+    // Dry-run останавливается на готовом staging: локально видно всё, что опубликует gh.
+    process.stdout.write(`Dry-run ${tag}: staging ${staging}\n`);
+
+    for (const file of uploaded) {
+      process.stdout.write(`  ${path.basename(file)}\n`);
+    }
+
+    process.stdout.write(`  gh release create ${tag} ${prerelease ? '--prerelease ' : ''}${assets.map((asset) => asset.file).join(' ')}\n`);
+
+    return;
+  }
+
   const notes = values.get('--notes') ? path.resolve(values.get('--notes')!) : null;
   const ghArgs = ['release', 'create', tag, '--title', tag];
 
@@ -507,7 +520,7 @@ const COMMANDS: Record<string, { spec: CommandSpec; run: (parsed: Parsed) => Pro
   release: {
     spec: {
       values: ['--tag', '--binary', '--notes', '--min-server-version', '--cache-dir'],
-      flags: ['--prerelease', '--sidecar'],
+      flags: ['--prerelease', '--sidecar', '--dry-run'],
     },
     run: release,
   },

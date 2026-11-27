@@ -10,6 +10,14 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: ID прогона, чьи артефакты dsh-* опубликовать (release без пересборки)
+        required: true
+      tag:
+        description: Тег релиза (vX.Y.Z или vX.Y.Z-rc.N)
+        required: true
 
 permissions:
   contents: write
@@ -21,6 +29,7 @@ env:
 jobs:
   check:
     name: Проверки пакета
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +63,7 @@ jobs:
 
   build:
     name: Сборка ${{ matrix.target }}
+    if: github.event_name != 'workflow_dispatch'
     needs: check
     strategy:
       fail-fast: false
@@ -122,7 +132,8 @@ jobs:
 
   release:
     name: GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    # По тегу — после сборок; вручную — переиспользует артефакты готового прогона.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -140,6 +151,8 @@ jobs:
           pattern: dsh-*
           path: ${{ github.workspace }}/.cache/release-download
           merge-multiple: true
+          run-id: ${{ inputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Права ELF после скачивания
         # download-artifact не сохраняет executable bit; ELF запускается для metadata и гейта.
         run: |
@@ -148,7 +161,8 @@ jobs:
       - name: Классифицировать тег
         id: tag
         run: |
-          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+          echo "tag=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ inputs.tag || github.ref_name }}" == *-* ]]; then
             echo "prerelease=--prerelease" >> "$GITHUB_OUTPUT"
           else
             echo "prerelease=" >> "$GITHUB_OUTPUT"
@@ -165,7 +179,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/cli.mts release --tag "${GITHUB_REF_NAME}" \
+          node scripts/cli.mts release --tag "${{ inputs.tag || github.ref_name }}" \
             --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-x64" \
             --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-arm64" \
             --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-darwin-arm64" \

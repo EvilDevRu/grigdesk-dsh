@@ -134,6 +134,16 @@ consumer-тесты GrigDesk против готового ELF (`GRIGDESK_DSH_TE
   (`assertStableAdmission`) и по фактическому linux-x64 ELF; кандидат без допуска
   публикуется только как prerelease.
 
+## Перед push
+
+```bash
+npm run check:workflow     # YAML + bash -n каждого run-блока
+bin/grigdesk-dsh release --tag vX.Y.Z-test --binary <ELF> --sidecar --dry-run
+```
+
+Правка публикации не требует пересборки: Actions → «Run workflow» с `run_id` готового
+прогона и `tag` публикует его артефакты (`workflow_dispatch`).
+
 ## Проверки
 
 ```bash

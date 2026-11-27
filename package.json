@@ -31,6 +31,8 @@
     "prune:cache": "node scripts/pruneRuntimeCache.mts",
     "test": "node scripts/test.mts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check:imports": "node scripts/checkImports.mts"
+    "check:imports": "node scripts/checkImports.mts",
+    "check:workflow": "node scripts/checkWorkflow.mts",
+    "check": "npm run -s check:workflow && npm run -s typecheck && node scripts/checkImports.mts && node scripts/test.mts"
   }
 }
