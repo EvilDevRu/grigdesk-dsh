@@ -51,9 +51,15 @@ bin/grigdesk-dsh build        # ELF → ~/.cache/grigdesk-dsh/out/deepseek
      pre-release GitHub с ELF и sidecar metadata (допуска может не быть)
 
 2. локально:
-   grigdesk-dsh admit --binary <linux-x64 ELF из rc> --mode api --admit
+   gh release download v1.2.0-rc.1 -p 'deepseek-linux-x64*' -D /tmp/dsh-rc
+   bin/grigdesk-dsh admit --binary /tmp/dsh-rc/deepseek-linux-x64 --mode api --admit
    → identity по --runtime-info ELF → живой smoke (3 хода, HTTP-ошибки Z.ai)
    → запись {mode, compatibility} в compatibility/glm.json
+
+   Допуск берётся на ELF **из rc-релиза**, а не на локальной сборке: identity включает
+   hashes сборочных скриптов (`scripts/*.ts`), поэтому локально собранный другим коммитом
+   ELF даст другой identity, чем CI. Правка любого файла из списка `deepSeekBuildInputs`
+   требует нового admit.
 
 3. коммит с glm.json → git tag v1.2.0 && git push --tags
    → Actions собирает три платформы уже с допуском; stable-гейт проверяет
