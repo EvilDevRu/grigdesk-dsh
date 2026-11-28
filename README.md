@@ -131,6 +131,7 @@ Stable releases require GLM admission for the bundled runtime. Each release incl
 
 Pushes to `main` and pull requests run type and import checks. Pushing a `v*` tag
 runs the full tests and builds the release binaries for Linux, macOS, and Windows.
+GitHub Release waits for both the tests and the desktop builds to pass.
 The same workflow run builds the [Android bundles](#android-bundles).
 
 In GLM, `subagent` and `subagent_fork` wait for a result by default. Set `run_in_background: true`

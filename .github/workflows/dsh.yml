@@ -67,7 +67,6 @@ jobs:
   build:
     name: Сборка ${{ matrix.target }}
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: check
     strategy:
       fail-fast: false
       matrix:
@@ -217,9 +216,10 @@ jobs:
 
   release:
     name: GitHub Release
-    # По тегу — после настольной сборки; вручную — из артефактов готового прогона.
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.build.result == 'success') }}
-    needs: build
+    # По тегу — после проверок и настольной сборки; вручную — из артефактов готового прогона.
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      (needs.check.result == 'success' && needs.build.result == 'success')) }}
+    needs: [check, build]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}

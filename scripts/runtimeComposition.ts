@@ -449,7 +449,7 @@ export async function indexWorkspacePackages(sourceDir: string): Promise<Map<str
   const result = new Map<string, WorkspacePackage>();
 
   /**
-   * Рекурсивный обход сохраняет исходные относительные пути каждого package.
+   * Относительные пути пакетов используют POSIX-формат ключей pnpm-lock.
    * Installed dependencies и test fixtures не становятся workspace packages.
    */
   const visit = async (relative: string): Promise<void> => {
@@ -474,7 +474,7 @@ export async function indexWorkspacePackages(sourceDir: string): Promise<Map<str
       }
 
       if (entry.isDirectory() && !['node_modules', 'tests', 'test', '.git'].includes(entry.name)) {
-        await visit(path.join(relative, entry.name));
+        await visit(path.posix.join(relative, entry.name));
       }
     }
   };
