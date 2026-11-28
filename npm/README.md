@@ -1,10 +1,10 @@
-# @grigdesk/deepseek
+# @grigdesk/dsh
 
 Terminal commands for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) as shipped by
 [GrigDesk](https://app.grigdesk.com): one pinned runtime, three commands.
 
 ```bash
-npm i -g @grigdesk/deepseek
+npm i -g @grigdesk/dsh
 
 deepseek        # DeepSeek chat in the current directory
 glm             # GLM (Z.ai) chat
@@ -25,7 +25,7 @@ SHA-256 against `manifest.json`, and keeps every version side by side:
 Supported platforms: Linux x64, Linux ARM64, macOS on Apple Silicon.
 
 The chat checks for stable releases in the background and links to available updates in the header.
-Use `npm i -g @grigdesk/deepseek@latest` to upgrade, or `deepseek chat --no-update-check` to skip the check.
+Use `npm i -g @grigdesk/dsh@latest` to upgrade, or `deepseek chat --no-update-check` to skip the check.
 
 ## API keys
 
@@ -42,7 +42,7 @@ the `.env` file of an installed GrigDesk (its Qwen key is `DASHSCOPE_API_KEY`; t
 ## Without network at install time
 
 ```bash
-npm i -g --ignore-scripts @grigdesk/deepseek
+npm i -g --ignore-scripts @grigdesk/dsh
 deepseek install      # downloads later; repeat any time
 ```
 

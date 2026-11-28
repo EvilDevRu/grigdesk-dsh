@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 export const NPM_PACKAGE_FILES = Object.freeze(['package.json', 'README.md', 'bin', 'scripts']);
-export const NPM_PACKAGE_NAME = '@grigdesk/deepseek';
+export const NPM_PACKAGE_NAME = '@grigdesk/dsh';
 /** Тот же адрес, что в npm/scripts/lib/layout.mjs: postinstall качает assets этого релиза. */
 export const NPM_DOWNLOAD_BASE = 'https://github.com/EvilDevRu/grigdesk-dsh/releases/download';
 

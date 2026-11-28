@@ -37,7 +37,7 @@ const HELP = `grigdesk-dsh-ctl — сборка, проверка, допуск 
   release   Опубликовать GitHub Release с ELF, manifest.json и sha256
             --tag vX.Y.Z --binary <ELF> [--binary <ELF>...] [--prerelease] [--notes <файл>]
             [--min-server-version <версия GrigDesk>] [--sidecar] [--dry-run]
-  publish-npm  Опубликовать npm-пакет @grigdesk/deepseek версии готового релиза
+  publish-npm  Опубликовать npm-пакет @grigdesk/dsh версии готового релиза
              (локально, токен в ~/.npmrc) --tag vX.Y.Z [--registry <url>] [--dry-run]
   prune     Чистка кэша поколений и резервных ELF
             [--cache-dir <каталог>] [--keep-builds N] [--keep-releases N]

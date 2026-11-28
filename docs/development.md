@@ -77,7 +77,7 @@ upstream, соберёт бинарник и проверит его. По ум�
 
 5. локально, после стабильного релиза:
    bin/grigdesk-dsh-ctl publish-npm --tag v1.2.0
-   → manifest релиза доступен → tarball @grigdesk/deepseek@1.2.0 → npm publish из ~/.npmrc
+   → manifest релиза доступен → tarball @grigdesk/dsh@1.2.0 → npm publish из ~/.npmrc
 ```
 
 Identity допуска не зависит от платформы, пути и buildId — только входы Harness
@@ -136,7 +136,7 @@ SHA-256, `--runtime-info`, полный `--verify` и контракт GrigDesk,
 ### Установка через npm
 
 ```bash
-npm i -g @grigdesk/deepseek
+npm i -g @grigdesk/dsh
 deepseek            # чат DeepSeek в текущей папке
 glm                 # чат GLM (Z.ai)
 qwen                # чат Qwen
@@ -156,7 +156,7 @@ qwen                # чат Qwen
 GrigDesk находит ту же установку через `current/deepseek` и зовёт ELF с прежними
 аргументами — терминал и приложение делят одну поставку и один распакованный runtime
 в `~/.grigdesk/runtimes/deepseek/`. Без сети при установке помогает
-`npm i -g --ignore-scripts @grigdesk/deepseek && deepseek install`. Зеркало релизов —
+`npm i -g --ignore-scripts @grigdesk/dsh && deepseek install`. Зеркало релизов —
 `GRIGDESK_DEEPSEEK_DOWNLOAD_BASE`, другие каталоги — `GRIGDESK_DEEPSEEK_DATA_HOME`
 и `GRIGDESK_DEEPSEEK_BIN_DIR`.
 

@@ -56,7 +56,7 @@ export async function install({ log = () => {}, env = process.env, fetchImpl = f
   const { version } = JSON.parse(await readFile(path.join(packageDirectory, 'package.json'), 'utf8'));
 
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(version) || version.startsWith('0.0.0')) {
-    throw new Error(`Версия пакета ${version} не опубликована: установите @grigdesk/deepseek из npm`);
+    throw new Error(`Версия пакета ${version} не опубликована: установите @grigdesk/dsh из npm`);
   }
 
   // Явное окружение важнее записанного при установке пути, тот — важнее умолчания:

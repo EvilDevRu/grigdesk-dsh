@@ -1,5 +1,5 @@
 {
-  "name": "@grigdesk/deepseek",
+  "name": "@grigdesk/dsh",
   "version": "0.0.0-dev",
   "description": "DeepSeek Harness CLI for GrigDesk: deepseek, glm and qwen terminal commands with a pinned runtime",
   "license": "MIT",

@@ -40,7 +40,7 @@ Install with Node.js 18.18 or later once the npm package and its matching GitHub
 For an unpublished build, see [Build from source](docs/development.md#быстрый-старт).
 
 ```bash
-npm i -g @grigdesk/deepseek
+npm i -g @grigdesk/dsh
 ```
 
 The installer downloads the standalone binary for your platform and verifies its SHA-256 against `manifest.json`.
@@ -120,7 +120,7 @@ and `/effort` to set reasoning effort when the model supports it. [Chat setup (R
 
 The terminal chat checks for stable releases in the background. The header shows a link when a newer
 release has a binary for your platform. Checks use a 20-hour cache. Use `deepseek chat --no-update-check`
-to skip the check for a session. To upgrade an npm installation, run `npm i -g @grigdesk/deepseek@latest`.
+to skip the check for a session. To upgrade an npm installation, run `npm i -g @grigdesk/dsh@latest`.
 
 GrigDesk checks the release manifest for its platform, architecture, minimum server version, and host contract.
 When a newer compatible release is available, choose **Update to …** in the provider card.

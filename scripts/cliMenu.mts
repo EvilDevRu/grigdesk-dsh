@@ -42,7 +42,7 @@ const actions = [
   {
     value: 'publish-npm',
     label: 'Опубликовать npm-пакет',
-    description: 'Собрать @grigdesk/deepseek версии готового релиза и опубликовать в npm.',
+    description: 'Собрать @grigdesk/dsh версии готового релиза и опубликовать в npm.',
   },
   {
     value: 'check',
