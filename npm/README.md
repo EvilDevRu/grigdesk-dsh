@@ -24,6 +24,9 @@ SHA-256 against `manifest.json`, and keeps every version side by side:
 
 Supported platforms: Linux x64, Linux ARM64, macOS on Apple Silicon.
 
+The chat checks for stable releases in the background and links to available updates in the header.
+Use `npm i -g @grigdesk/deepseek@latest` to upgrade, or `deepseek chat --no-update-check` to skip the check.
+
 ## API keys
 
 ```bash

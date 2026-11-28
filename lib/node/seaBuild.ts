@@ -1,4 +1,5 @@
 import { createWriteStream } from 'node:fs';
+import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
@@ -12,16 +13,43 @@ import type { NodeRuntime } from './nodeRuntime.ts';
 export function nodeArchive(runtime: { version: string; platform: string }): {
   name: string;
   directory: string;
+  executable: string;
+  npm: string;
   url: string;
 } {
-  const directory = `node-v${runtime.version}-${runtime.platform}`;
-  const name = `${directory}.tar.xz`;
+  const windows = runtime.platform.startsWith('win32-');
+  const directory = `node-v${runtime.version}-${runtime.platform.replace(/^win32-/u, 'win-')}`;
+  const name = `${directory}.${windows ? 'zip' : 'tar.xz'}`;
 
   return {
     name,
     directory,
+    executable: windows ? 'node.exe' : 'bin/node',
+    npm: windows ? 'node_modules/npm/bin/npm-cli.js' : 'lib/node_modules/npm/bin/npm-cli.js',
     url: `https://nodejs.org/dist/v${runtime.version}/${name}`,
   };
+}
+
+/**
+ * BSD tar из Windows читает ZIP, а Unix tar читает xz.
+ * Ограниченный режим извлекает ровно worker и лицензию для SEA.
+ */
+export function nodeExtractArgs(runtime: NodeRuntime, archive: string, minimal = false): string[] {
+  const node = nodeArchive(runtime);
+  const flag = runtime.platform.startsWith('win32-') ? '-xf' : '-xJf';
+  const files = minimal ? [`${node.directory}/${node.executable}`, `${node.directory}/LICENSE`] : [];
+
+  return [flag, archive, '--strip-components=1', ...files];
+}
+
+/**
+ * Официальный ZIP Node распаковывает BSD tar из System32.
+ * Git Bash может поставить свой GNU tar первым в PATH, поэтому путь задаётся явно.
+ */
+export function nodeTarExecutable(platform: string = process.platform): string {
+  return platform === 'win32'
+    ? path.win32.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
+    : 'tar';
 }
 
 /**
@@ -48,7 +76,7 @@ export function seaConfig(assets: Readonly<Record<string, string>> = {}): Record
  * Кэш официального Node и файлы прежней сборки остаются вне work.
  */
 export async function injectSea(input: {
-  target: NodeRuntime['platform'];
+  target: NodeRuntime['platform'] | `android-${'arm64' | 'x64'}`;
   work: string;
   node: string;
   postject: string;

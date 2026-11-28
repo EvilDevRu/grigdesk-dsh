@@ -44,6 +44,8 @@ export type PayloadZipFactory = (onFile: (file: PayloadZipFile) => void) => {
 export function createPayloadCodec(invalidPayload: () => never, createUnzip: PayloadZipFactory) {
   const decode = contractDecoders(invalidPayload);
   const hashPattern = /^[a-f0-9]{64}$/u;
+  const windows = process.platform === 'win32';
+  const windowsDevice = /^(?:con|prn|aux|nul|(?:com|lpt)[1-9¹²³])(?:\.|$)/iu;
 
   /**
    * Пути индекса канонические и относительные; нормализация не скрывает дубль или traversal.
@@ -53,7 +55,8 @@ export function createPayloadCodec(invalidPayload: () => never, createUnzip: Pay
     const name = decode.text(value, 'path');
 
     if (name.includes('\0') || name.includes('\\') || name.split('/').some(
-      (part) => part === '' || part === '.' || part === '..',
+      (part) => part === '' || part === '.' || part === '..' || windows
+        && (/[<>:"|?*\u0001-\u001f]|[. ]$/u.test(part) || windowsDevice.test(part)),
     )) {
       invalidPayload();
     }
@@ -185,10 +188,17 @@ export function createPayloadCodec(invalidPayload: () => never, createUnzip: Pay
   function decodePayloadIndex(value: unknown): PayloadEntry[] {
     const list = decode.listOf(decodeEntry)(value, 'entries');
     const entries = new Map<string, PayloadEntry>();
+    const windowsNames = new Set<string>();
 
     for (const entry of list) {
-      if (entries.has(entry.path)) {
+      const name = entry.path.toLowerCase();
+
+      if (entries.has(entry.path) || windows && windowsNames.has(name)) {
         invalidPayload();
+      }
+
+      if (windows) {
+        windowsNames.add(name);
       }
 
       entries.set(entry.path, entry);
@@ -209,6 +219,25 @@ export function createPayloadCodec(invalidPayload: () => never, createUnzip: Pay
     }
 
     return list;
+  }
+
+  /**
+   * Windows записывает тип ссылки при её создании. Даже если звено цепочки ещё
+   * не распаковано, конечный тип известен из проверенного индекса.
+   */
+  function payloadLinkKinds(list: PayloadEntry[]): Map<string, 'dir' | 'file'> {
+    const entries = new Map(list.map((entry) => [entry.path, entry]));
+    const kinds = new Map<string, 'dir' | 'file'>();
+
+    for (const entry of list) {
+      if (entry.type === 'link') {
+        const name = resolveLink([...entry.path.split('/').slice(0, -1), ...entry.target.split('/')], entries);
+
+        kinds.set(entry.path, entries.get(name)?.type === 'dir' ? 'dir' : 'file');
+      }
+    }
+
+    return kinds;
   }
 
   /**
@@ -334,5 +363,6 @@ export function createPayloadCodec(invalidPayload: () => never, createUnzip: Pay
     decodePayloadIndex,
     decodePayloadDescriptor,
     consumePayloadArchive,
+    payloadLinkKinds,
   };
 }

@@ -271,16 +271,18 @@ export async function verifyCompiledResources(
     }
   }
 
-  const report = process.report!.getReport() as { header: { glibcVersionRuntime?: string } };
-  const filename = process.platform === 'linux'
-    ? `${report.header.glibcVersionRuntime ? 'glibc' : 'musl'}/system.node`
-    : 'system.node';
+  if (process.platform === 'linux' || process.platform === 'darwin') {
+    const report = process.report!.getReport() as { header: { glibcVersionRuntime?: string } };
+    const filename = process.platform === 'linux'
+      ? `${report.header.glibcVersionRuntime ? 'glibc' : 'musl'}/system.node`
+      : 'system.node';
 
-  requirements.push({
-    owner: '@deepseek-ai/node-addon-system',
-    kind: 'native',
-    target: `native/system/packages/${process.platform}-${process.arch}/bin/${filename}`,
-  });
+    requirements.push({
+      owner: '@deepseek-ai/node-addon-system',
+      kind: 'native',
+      target: `native/system/packages/${process.platform}-${process.arch}/bin/${filename}`,
+    });
+  }
 
   const available = new Set<string>();
 

@@ -23,6 +23,7 @@ export interface ChatOptions {
   writableRoots?: readonly string[];
   schedule?: boolean;
   qwenService?: 'model-studio' | 'token-plan';
+  noUpdateCheck?: boolean;
 }
 
 export interface ChatProfile {
@@ -37,10 +38,11 @@ export const chatHelp = `DeepSeek Harness · терминальный чат
   deepseek chat [-p deepseek|glm|qwen] [-C каталог] [-m модель] [--effort уровень]
                 [--mode read-only|workspace-write] [--resume ID | --last]
                 [--glm-mode api|coding-plan] [--qwen-service model-studio|token-plan]
-                [--add-dir каталог ...] [--schedule]
+                [--add-dir каталог ...] [--schedule] [--no-update-check]
 
 Подключения: DEEPSEEK_API_KEY, ZAI_API_KEY / ZAI_CODING_API_KEY, QWEN_API_KEY.
 Qwen: QWEN_BASE_URL задаёт свой адрес, QWEN_MODELS — список моделей через запятую.
+При запуске проверяется стабильный выпуск. --no-update-check отключает проверку.
 Команды чата: /model, /effort, /resume, /status, /help, /exit.`;
 
 /**
@@ -61,6 +63,7 @@ export function parseChatOptions(args: string[], cwd = process.cwd()): ChatOptio
     last: { type: 'boolean' },
     'glm-mode': { type: 'string' },
     'qwen-service': { type: 'string' },
+    'no-update-check': { type: 'boolean' },
   } as const;
   let values;
 
@@ -110,6 +113,7 @@ export function parseChatOptions(args: string[], cwd = process.cwd()): ChatOptio
     mode, resume, model, effort, glmMode, qwenService,
     writableRoots: values['add-dir']?.map((directory) => path.resolve(cwd, values.cd ?? '.', directory)),
     schedule: values.schedule,
+    noUpdateCheck: values['no-update-check'],
     cwd: path.resolve(cwd, values.cd ?? '.'),
     last: values.last ?? false,
   };

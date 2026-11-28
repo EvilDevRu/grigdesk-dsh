@@ -6267,7 +6267,7 @@
     },
     {
       "path": "glm-schedule-session.patch",
-      "sha256": "65ea173879ea8dff09c65ba27924f8e5790cd0480c228ae99752259a9411ce80"
+      "sha256": "a24dccc168406f6f607046e5175532053c15fa6b6b0749ca80f6b97152e2c7d8"
     },
     {
       "path": "glm-v3-journal-events.patch",
@@ -6275,7 +6275,7 @@
     },
     {
       "path": "glm-v5-tool-visibility.patch",
-      "sha256": "bfd1cf9ed72075670de951eb4c8cef156d1fad39651905924770abd1c18e46b3"
+      "sha256": "155503735d5f4734e2f42b97fe968a8b1434dcfe517995be3c8a109ee3bd0213"
     },
     {
       "path": "glm54-catalog.patch",

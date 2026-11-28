@@ -3,7 +3,7 @@ import path from 'node:path';
 import { getRawAsset } from 'node:sea';
 
 import { decodeDeepSeekRuntimeInfo } from '../../lib/chat/deepSeekBinary.ts';
-import { sha256 } from '../../lib/node/hash.ts';
+import { sha256, sha256File } from '../../lib/node/hash.ts';
 import { launcherFailure, parseLauncherArgs } from './args.ts';
 import { applyCredentials } from './credentials.ts';
 import { chatHelp, parseChatOptions } from './chatProfile.ts';
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
         ];
 
         await applyCredentials(process.env);
-        process.exitCode = await runTerminalChat(options, inherited);
+        process.exitCode = await runTerminalChat(options, inherited, info);
       }
     } catch (error) {
       process.stderr.write(`${(error as Error).message}\n`);
@@ -118,8 +118,16 @@ async function main(): Promise<void> {
       }
     },
   });
+  // APK разрешает exec только из nativeLibraryDir. Соседний Node сверяется с SEA перед запуском.
+  const worker = process.platform === 'android' ? path.join(path.dirname(process.execPath), 'libnode.so') : null;
+
+  if (worker && await sha256File(worker) !== info.workerNode.sha256) {
+    throw new Error('Контрольная сумма Android worker не совпала');
+  }
+
   const result = await runLauncherWorker({
     directory,
+    executable: worker ?? undefined,
     entry: path.join(directory, args.mode === 'verify' ? 'worker-verify.mjs' : 'generation/entry.mjs'),
     args: args.mode === 'verify' ? [directory] : args.harnessArgs,
     capture: args.mode === 'verify',

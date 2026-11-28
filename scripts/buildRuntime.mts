@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 
 import { sha256 } from '../lib/node/hash.ts';
 import type { GlmCompatibilityRuntime } from '../lib/node/glmCompatibility.ts';
-import { makeReadOnlyTree } from '../lib/node/files.ts';
+import { makeReadOnlyTree, portableLinkTarget } from '../lib/node/files.ts';
 import { GLM_SESSION_EVENTS } from '../lib/node/glmGateProtocol.ts';
 import { deepSeekPackagePaths } from './paths.ts';
 
@@ -81,6 +81,7 @@ async function applyExternalPatch(directory: string, file: string, expected: str
 
   const env = {
     PATH: process.env.PATH,
+    SystemRoot: process.env.SystemRoot,
     GIT_CEILING_DIRECTORIES: path.dirname(directory),
   };
 
@@ -383,7 +384,7 @@ export async function hashRuntimePayload(root: string, relative = ''): Promise<R
 
       output[name] = sha256(`${mode}:${bytes.toString('base64')}`);
     } else if (entry.isSymbolicLink()) {
-      const target = await fs.readlink(path.join(root, name));
+      const target = portableLinkTarget(await fs.readlink(path.join(root, name)));
       const resolved = path.relative(root, path.resolve(root, path.dirname(name), target));
 
       if (path.isAbsolute(target) || resolved.startsWith('..') || path.isAbsolute(resolved)) {
@@ -416,7 +417,7 @@ async function linkWorkspace(
     const target = path.join(moduleRoot, item.name);
 
     await fs.mkdir(path.dirname(target), { recursive: true });
-    await fs.symlink(path.relative(path.dirname(target), path.join(root, item.root)), target);
+    await fs.symlink(path.relative(path.dirname(target), path.join(root, item.root)), target, 'dir');
 
     for (const [name, version] of Object.entries(closure.external[item.name] ?? {})) {
       const alias = buildManifest.dependencies[name] === version
@@ -429,7 +430,7 @@ async function linkWorkspace(
       const local = path.join(root, item.root, 'node_modules', name);
 
       await fs.mkdir(path.dirname(local), { recursive: true });
-      await fs.symlink(path.relative(path.dirname(local), dependency), local);
+      await fs.symlink(path.relative(path.dirname(local), dependency), local, 'dir');
     }
   }
 }
@@ -782,6 +783,7 @@ export async function buildDeepSeekRuntime(options: {
         settingsAcp: true,
         toolPermissions: true,
         glmNativeGate: true,
+        glmManagedSchedule: true,
       },
       ...(llmPiAi ? { llmPiAi } : {}),
     };
@@ -803,7 +805,9 @@ export async function buildDeepSeekRuntime(options: {
       arch: process.arch,
       nativeAbi: process.versions.modules,
       toolInputs: originalInputs,
-      nativeToolchain: (await exec('cc', ['--version'])).stdout.split('\n')[0],
+      nativeToolchain: process.platform === 'win32'
+        ? 'npm Windows prebuilds'
+        : (await exec('cc', ['--version'])).stdout.split('\n')[0],
     };
     const buildId = createHash('sha256').update(JSON.stringify({ inputIdentity, payload })).digest('hex');
     const descriptor = {

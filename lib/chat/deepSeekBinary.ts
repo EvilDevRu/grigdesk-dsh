@@ -79,7 +79,11 @@ const decodeHost = objectOf({
 type BaseRuntimeInfo = ReturnType<typeof decodeInfo>;
 
 export type DeepSeekRuntimeInfo = Omit<BaseRuntimeInfo, 'capabilities'> & {
-  capabilities: BaseRuntimeInfo['capabilities'] & { toolPermissions?: boolean; glmNativeGate?: boolean };
+  capabilities: BaseRuntimeInfo['capabilities'] & {
+    toolPermissions?: boolean;
+    glmNativeGate?: boolean;
+    glmManagedSchedule?: boolean;
+  };
 };
 export type DeepSeekHostContract = ReturnType<typeof decodeHost>;
 
@@ -153,6 +157,11 @@ export function decodeDeepSeekRuntimeInfo(value: unknown): DeepSeekRuntimeInfo {
   if (Object.hasOwn(sourceCapabilities, 'glmNativeGate')) {
     result.capabilities.glmNativeGate = boolean(
       sourceCapabilities.glmNativeGate, 'runtime-info.capabilities.glmNativeGate',
+    );
+  }
+  if (Object.hasOwn(sourceCapabilities, 'glmManagedSchedule')) {
+    result.capabilities.glmManagedSchedule = boolean(
+      sourceCapabilities.glmManagedSchedule, 'runtime-info.capabilities.glmManagedSchedule',
     );
   }
 

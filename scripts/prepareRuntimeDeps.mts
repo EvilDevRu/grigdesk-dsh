@@ -9,7 +9,7 @@ import {
 } from '../lib/node/nodeRuntime.ts';
 import { withWorkDirectory } from '../lib/node/files.ts';
 import { sha256File } from '../lib/node/hash.ts';
-import { downloadFile } from '../lib/node/seaBuild.ts';
+import { downloadFile, nodeArchive, nodeExtractArgs, nodeTarExecutable } from '../lib/node/seaBuild.ts';
 import { deepSeekPackagePaths } from './paths.ts';
 
 const run = promisify(execFile);
@@ -38,13 +38,14 @@ export async function readPreparedRuntimeDependencies(
   const pin = await readTargetNodeRuntime(componentNodeRuntimeManifest(packageDir, target), target);
   const root = runtimeCache(cacheDir, pin);
   const directory = path.join(root, 'runtime-deps-node24');
-  const node = path.join(root, 'node-runtime/bin/node');
+  const node = path.join(root, 'node-runtime', nodeArchive(pin).executable);
 
   try {
     const stamp = JSON.parse(await readFile(path.join(directory, '.prepared.json'), 'utf8'));
 
     if (stamp.version !== pin.version || stamp.archiveSha256 !== pin.sha256
-      || (target === 'darwin-arm64' || stamp.target !== undefined) && stamp.target !== target
+      || (target.startsWith('win32-') || target === 'darwin-arm64' || stamp.target !== undefined)
+        && stamp.target !== target
       || typeof stamp.abi !== 'string' || stamp.nodeSha256 !== await sha256File(node)) {
       throw new Error('stamp');
     }
@@ -84,6 +85,8 @@ export async function prepareRuntimeDependencies(cacheDir: string): Promise<Prep
   const root = runtimeCache(cacheDir, pin);
   const nodeRoot = path.join(root, 'node-runtime');
   const directory = path.join(root, 'runtime-deps-node24');
+  const distribution = nodeArchive(pin);
+  const node = path.join(nodeRoot, distribution.executable);
 
   try {
     return await readPreparedRuntimeDependencies(cacheDir);
@@ -91,11 +94,11 @@ export async function prepareRuntimeDependencies(cacheDir: string): Promise<Prep
     // Этот явный шаг вправе переустановить свой prefix; обычный build лишь отказывает.
   }
 
-  const nodeExists = await readFile(path.join(nodeRoot, 'bin/node')).then(() => true, () => false);
+  const nodeExists = await readFile(node).then(() => true, () => false);
 
   if (!nodeExists) {
     await withWorkDirectory(root, async (work) => {
-      await run('tar', ['-xJf', archive, '--strip-components=1'], { cwd: work });
+      await run(nodeTarExecutable(), nodeExtractArgs(pin, archive), { cwd: work });
       await rename(work, nodeRoot);
     });
   }
@@ -117,15 +120,24 @@ export async function prepareRuntimeDependencies(cacheDir: string): Promise<Prep
   await mkdir(home, { recursive: true, mode: 0o700 });
   await mkdir(temporary, { recursive: true, mode: 0o700 });
 
-  const node = path.join(nodeRoot, 'bin/node');
   const environment = {
     HOME: home,
-    PATH: `${path.join(nodeRoot, 'bin')}:/usr/bin:/bin`,
+    PATH: [path.dirname(node), process.platform === 'win32' ? process.env.PATH ?? '' : '/usr/bin:/bin']
+      .join(path.delimiter),
     TMPDIR: temporary,
     XDG_CACHE_HOME: path.join(root, 'build-cache'),
-    NPM_CONFIG_USERCONFIG: '/dev/null',
+    NPM_CONFIG_USERCONFIG: path.join(home, '.npmrc'),
     NODE_ENV: 'production',
     LANG: 'C.UTF-8',
+    ...process.platform === 'win32' ? {
+      SystemRoot: process.env.SystemRoot,
+      ComSpec: process.env.ComSpec,
+      TEMP: temporary,
+      TMP: temporary,
+      USERPROFILE: home,
+      APPDATA: home,
+      LOCALAPPDATA: home,
+    } : {},
   };
   const identitySource = 'JSON.stringify({ version: process.versions.node, abi: process.versions.modules, '
     + 'platform: process.platform, arch: process.arch })';
@@ -138,7 +150,7 @@ export async function prepareRuntimeDependencies(cacheDir: string): Promise<Prep
     throw new Error('Версия подготовленного Node не совпадает с pin');
   }
 
-  const npm = path.join(nodeRoot, 'lib/node_modules/npm/bin/npm-cli.js');
+  const npm = path.join(nodeRoot, distribution.npm);
   const result = await run(node, [npm, 'ci', '--include=dev', '--prefix', directory,
     '--cache', path.join(root, 'npm-cache'), '--prefer-offline', '--no-audit', '--no-fund'], {
     env: environment,

@@ -1,0 +1,28 @@
+diff --git a/deps/postject/postject-api.h b/deps/postject/postject-api.h
+--- a/deps/postject/postject-api.h
++++ b/deps/postject/postject-api.h
+@@ -13,6 +13,9 @@
+ #include <elf.h>
+ #include <link.h>
+ #include <sys/param.h>
++#if defined(__ANDROID__)
++#include <sys/auxv.h>
++#endif
+ #elif defined(_WIN32)
+ #include <windows.h>
+ #endif
+@@ -47,7 +50,14 @@
+ static int postject__dl_iterate_phdr_callback(struct dl_phdr_info* info,
+                                               size_t size,
+                                               void* data) {
++#if defined(__ANDROID__)
++  // Bionic может вернуть linker64 первым. Основной ELF определяется по AT_PHDR.
++  if ((uintptr_t)info->dlpi_phdr != getauxval(AT_PHDR)) {
++    return 0;
++  }
++#else
+   // Snag the dl_phdr_info struct for the main program, then stop iterating
++#endif
+   *((struct dl_phdr_info*)data) = *info;
+   return 1;
+ }

@@ -1,6 +1,6 @@
 name: grigdesk-dsh
 
-# Сборка поставки на трёх нативных целях, проверки и публикация Release.
+# Сборка нативных поставок, проверки и публикация Release.
 # Живой smoke GLM в CI не выполняется: допуск — вход сборки (compatibility/glm.json),
 # полученный локально `grigdesk-dsh-ctl admit --admit` и зафиксированный коммитом.
 # Stable-тег требует допуск режима потребителя; кандидат без допуска — только prerelease.
@@ -78,12 +78,31 @@ jobs:
             target: linux-arm64
           - os: macos-15
             target: darwin-arm64
+          - os: windows-2025
+            target: win32-x64
+            extension: .exe
+          - os: windows-11-arm
+            target: win32-arm64
+            extension: .exe
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      DSH_OUTPUT: deepseek${{ matrix.extension }}
+      DSH_ASSET: deepseek-${{ matrix.target }}${{ matrix.extension }}
+      # Git for Windows по умолчанию использует CRLF и ограничивает длинные пути.
+      GIT_CONFIG_COUNT: 2
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+      GIT_CONFIG_KEY_1: core.longpaths
+      GIT_CONFIG_VALUE_1: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          architecture: ${{ endsWith(matrix.target, '-arm64') && 'arm64' || 'x64' }}
       - name: Зависимости
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Кэш pinned Node и снимка upstream
@@ -95,7 +114,7 @@ jobs:
           key: dsh-build-${{ matrix.target }}-${{ hashFiles('build/node-runtime*.json', 'build/runtime-deps/package-lock.json', 'vendor/deepseek-harness/upstream.lock.json') }}
       - name: Среда сборки
         run: |
-          node scripts/prepareRuntimeDeps.mts --node-cache-dir "$GRIGDESK_DSH_CACHE/node-cache"
+          node scripts/prepareRuntimeDeps.mts --node-cache-dir .cache/node-cache
           node scripts/prepareUpstream.mts
       - name: Нативные инструменты Apple Silicon
         # Сборщик на darwin читает Mach-O helper process-identity и его SHA только из окружения.
@@ -103,39 +122,102 @@ jobs:
         run: |
           xcrun --sdk macosx --show-sdk-path
           node scripts/prepareDarwinTools.mts "$RUNNER_TEMP/dsh-darwin-tools" >> "$GITHUB_ENV"
-      - name: Сборка и полная проверка ELF
+      - name: Сборка и полная проверка поставки
         env:
+          DSH_RELEASE_TAG: ${{ github.ref_name }}
           # diag: сырые причины launcher видны только в журнале сборки
           GRIGDESK_DSH_LAUNCHER_TRACE: "1"
         run: |
-          node scripts/buildBinary.mts --out-dir "$GRIGDESK_DSH_CACHE/out" --node-cache-dir "$GRIGDESK_DSH_CACHE/node-cache"
-          node scripts/verify.mts --binary "$GRIGDESK_DSH_CACHE/out/deepseek"
+          node scripts/buildBinary.mts --out-dir .cache/out --node-cache-dir .cache/node-cache \
+            --binary-version "${DSH_RELEASE_TAG#v}"
+          node scripts/verify.mts --binary ".cache/out/$DSH_OUTPUT"
       - name: Имя цели и metadata
-        # Sidecar пишет сам ELF на родном runner: linux затем описывает darwin/arm64 без запуска.
+        # Sidecar пишет сам бинарник на родном runner. Job публикации читает его на Linux.
         run: |
-          mv "$GRIGDESK_DSH_CACHE/out/deepseek" "$GRIGDESK_DSH_CACHE/out/deepseek-${{ matrix.target }}"
-          "$GRIGDESK_DSH_CACHE/out/deepseek-${{ matrix.target }}" --runtime-info --json \
-            > "$GRIGDESK_DSH_CACHE/out/deepseek-${{ matrix.target }}.runtime-info.json"
+          mv ".cache/out/$DSH_OUTPUT" ".cache/out/$DSH_ASSET"
+          ".cache/out/$DSH_ASSET" --runtime-info --json > ".cache/out/$DSH_ASSET.runtime-info.json"
       - name: Допуск GLM (информационно)
         # Код 3 — допуск ещё не получен: нормальный кандидат для prerelease.
         continue-on-error: true
         run: |
           MODE=$(node -p "require('./contracts/grigdesk-host-contract.json').glm.mode")
-          node scripts/admissionCheck.mts --binary "$GRIGDESK_DSH_CACHE/out/deepseek-${{ matrix.target }}" \
-            --mode "$MODE" --host-contract "$GITHUB_WORKSPACE/contracts/grigdesk-host-contract.json"
+          node scripts/admissionCheck.mts --binary ".cache/out/$DSH_ASSET" \
+            --mode "$MODE" --host-contract contracts/grigdesk-host-contract.json
       - name: Артефакт цели
         uses: actions/upload-artifact@v4
         with:
           name: dsh-${{ matrix.target }}
           path: |
-            ${{ env.GRIGDESK_DSH_CACHE }}/out/deepseek-${{ matrix.target }}
-            ${{ env.GRIGDESK_DSH_CACHE }}/out/deepseek-${{ matrix.target }}.runtime-info.json
+            .cache/out/${{ env.DSH_ASSET }}
+            .cache/out/${{ env.DSH_ASSET }}.runtime-info.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  android:
+    name: Сборка Android ${{ matrix.abi }}
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, x86_64]
+    env:
+      GRIGDESK_ANDROID_BUILDER: 5921a2e99945ac3bca8c6da55046d9f78f085486
+    steps:
+      - uses: actions/checkout@v4
+      - name: Закреплённый сборщик Bionic из GrigDesk
+        uses: actions/checkout@v4
+        with:
+          repository: EvilDevRu/grigdesk
+          ref: ${{ env.GRIGDESK_ANDROID_BUILDER }}
+          path: .cache/grigdesk
+          persist-credentials: false
+          sparse-checkout: |
+            tools/android/node-bionic.mts
+            tools/android/ndk.lock.json
+            shared/node/hash.ts
+          sparse-checkout-cone-mode: false
+      - name: Версия Node для генерации SEA
+        id: node
+        run: |
+          jq -er '"version=" + (.nodeTag | ltrimstr("v"))' \
+            .cache/grigdesk/tools/android/ndk.lock.json >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+      - name: Зависимости
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Кэш Bionic Node
+        uses: actions/cache@v4
+        with:
+          path: .cache/android-toolchain/out/${{ matrix.abi }}
+          key: dsh-bionic-${{ matrix.abi }}-${{ env.GRIGDESK_ANDROID_BUILDER }}-${{ hashFiles('build/android/node-sea.patch') }}
+      - name: Подготовить Bionic Node и NDK
+        run: |
+          bash scripts/prepareAndroidNode.sh "$PWD/.cache/grigdesk" '${{ matrix.abi }}' "$PWD/.cache/android-toolchain"
+      - name: Зависимости рабочего поколения Harness
+        run: |
+          node scripts/prepareRuntimeDeps.mts --node-cache-dir .cache/node-cache
+          node scripts/prepareUpstream.mts
+      - name: Собрать и проверить комплект Android
+        run: |
+          node scripts/buildAndroid.mts '${{ matrix.abi }}' .cache/android-toolchain .cache/node-cache \
+            "android-dist/${{ matrix.abi }}"
+          (cd "android-dist/${{ matrix.abi }}" && sha256sum --check SHA256SUMS)
+      - name: Артефакт Android
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-dsh-${{ matrix.abi }}
+          path: android-dist/${{ matrix.abi }}/
           if-no-files-found: error
           retention-days: 14
 
   release:
     name: GitHub Release
-    # По тегу — после сборок; вручную — переиспользует артефакты готового прогона.
+    # По тегу — после настольной сборки; вручную — из артефактов готового прогона.
     if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.build.result == 'success') }}
     needs: build
     runs-on: ubuntu-latest
@@ -150,7 +232,7 @@ jobs:
           node-version: 24
       - name: Зависимости
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Скачать ELF всех целей
+      - name: Скачать бинарники всех настольных целей
         uses: actions/download-artifact@v4
         with:
           pattern: dsh-*
@@ -158,10 +240,10 @@ jobs:
           merge-multiple: true
           run-id: ${{ inputs.run_id || github.run_id }}
           github-token: ${{ github.token }}
-      - name: Права ELF после скачивания
-        # download-artifact не сохраняет executable bit; ELF запускается для metadata и гейта.
+      - name: Права Linux x64 после скачивания
+        # download-artifact не сохраняет executable bit. Linux x64 нужен для гейта допуска GLM.
         run: |
-          chmod 0755 .cache/release-download/deepseek-*
+          chmod 0755 .cache/release-download/deepseek-linux-x64
           ls -la .cache/release-download
       - name: Классифицировать тег
         id: tag
@@ -173,7 +255,7 @@ jobs:
           fi
       - name: Stable требует допуск по фактическому linux-x64 ELF
         # Identity допуска не зависит от платформы, поэтому linux-x64 ELF представляет все цели;
-        # CLI ниже дополнительно требует запись допуска в metadata каждого ELF и один buildId.
+        # CLI дополнительно проверяет допуск и общую identity поколения по metadata всех целей.
         if: steps.tag.outputs.prerelease == ''
         run: |
           MODE=$(node -p "require('./contracts/grigdesk-host-contract.json').glm.mode")
@@ -183,8 +265,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          downloads="$GITHUB_WORKSPACE/.cache/release-download"
+          windows=()
+          # Старые прогоны для ручной публикации могли содержать только Linux и macOS.
+          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch || -f "$downloads/deepseek-win32-x64.exe" \
+            || -f "$downloads/deepseek-win32-arm64.exe" ]]; then
+            windows=(--binary "$downloads/deepseek-win32-x64.exe" --binary "$downloads/deepseek-win32-arm64.exe")
+          fi
           node scripts/cli.mts release --tag "$RELEASE_TAG" \
-            --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-x64" \
-            --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-arm64" \
-            --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-darwin-arm64" \
+            --binary "$downloads/deepseek-linux-x64" \
+            --binary "$downloads/deepseek-linux-arm64" \
+            --binary "$downloads/deepseek-darwin-arm64" \
+            "${windows[@]}" \
             --sidecar ${{ steps.tag.outputs.prerelease }}

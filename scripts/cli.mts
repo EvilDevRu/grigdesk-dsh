@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 
 import { decodeDeepSeekRuntimeInfo } from '../lib/chat/deepSeekBinary.ts';
 import { dshCacheHome, nodeCachePath } from '../lib/runtime/dshHome.ts';
+import { executableName } from '../lib/runtime/executable.ts';
 import { runCliMenu } from './cliMenu.mts';
 import { runCliAction, runSteps } from './cliProgress.mts';
 import {
@@ -432,7 +433,7 @@ async function release({ values, repeated, flags }: Parsed): Promise<void> {
   const uploaded: string[] = [];
 
   for (const [index, asset] of assets.entries()) {
-    const name = `deepseek-${asset.platform}-${asset.arch}`;
+    const name = executableName(`deepseek-${asset.platform}-${asset.arch}`, asset.platform);
     const target = path.join(staging, name);
 
     await fs.copyFile(binaries[index]!, target);

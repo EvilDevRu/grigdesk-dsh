@@ -44,6 +44,7 @@ npm i -g @grigdesk/deepseek
 ```
 
 The installer downloads the standalone binary for your platform and verifies its SHA-256 against `manifest.json`.
+The npm installer supports Linux x64, Linux ARM64, and macOS on Apple Silicon.
 By default, it keeps binaries under `~/.local/share/grigdesk-dsh/` and adds command links to `~/.local/bin`.
 See the [npm package documentation](npm/README.md) for mirrors and custom install paths.
 
@@ -55,14 +56,18 @@ DeepSeek and GLM share the installation and use separate access settings.
 
 ### Download the binary
 
-Once a stable release is published, download the file for your platform from
+Once a stable release is published, download desktop binaries from
 [GitHub Releases](https://github.com/EvilDevRu/grigdesk-dsh/releases).
 
-| Platform | Release asset |
+| Platform | Download |
 | :--- | :--- |
 | Linux x64 | [`deepseek-linux-x64`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/deepseek-linux-x64) |
 | Linux ARM64 | [`deepseek-linux-arm64`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/deepseek-linux-arm64) |
 | macOS on Apple Silicon | [`deepseek-darwin-arm64`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/deepseek-darwin-arm64) |
+| Windows x64 | [`deepseek-win32-x64.exe`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/deepseek-win32-x64.exe) |
+| Windows ARM64 | [`deepseek-win32-arm64.exe`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/deepseek-win32-arm64.exe) |
+| Android ARM64 (`arm64-v8a`) | [`android-dsh-arm64-v8a`](#android-bundles) |
+| Android x86_64 | [`android-dsh-x86_64`](#android-bundles) |
 
 <details>
 <summary><strong>Verify a manual download</strong></summary>
@@ -79,18 +84,43 @@ For Linux ARM64, use `deepseek-linux-arm64` in the commands above. On macOS, use
 `shasum -a 256 -c deepseek-darwin-arm64.sha256` for the checksum and
 `deepseek-darwin-arm64` for the executable.
 
+On Windows, compare the output of `Get-FileHash .\deepseek-win32-x64.exe -Algorithm SHA256`
+with the `.sha256` file, then run `.\deepseek-win32-x64.exe --verify --json`.
+For Windows ARM64, use `deepseek-win32-arm64.exe` in both commands.
+
 </details>
 
-## Терминальный чат
+### Android bundles
 
-При первом запуске добавьте ключ через `deepseek login` или задайте переменную окружения своего подключения.
-Из папки проекта запустите `deepseek`, `glm` или `qwen`. Для ручной установки укажите путь к бинарнику,
-например `./deepseek-linux-x64 login` для настройки ключа и `./deepseek-linux-x64 chat` для чата.
-Выберите подключение и режим доступа стрелками или левым кликом. Колесо мыши и `PgUp`/`PgDn` листают историю.
-По умолчанию сессии и настройки чата хранятся в `~/.deepseek/cli/`. `/model` меняет модель, а `/effort`
-выбирает уровень рассуждения, если модель его поддерживает. [Настройка чата](docs/development.md#терминальный-чат)
+Open the workflow run for the `v*` tag you need and download the bundle for your architecture
+from **Artifacts**. Each bundle contains the `.so` libraries for APK packaging and a `SHA256SUMS` file.
+[GitHub Actions runs](https://github.com/EvilDevRu/grigdesk-dsh/actions/workflows/dsh.yml) ·
+[APK packaging guide (Russian)](docs/development.md#комплекты-android)
+
+<a name="терминальный-чат"></a>
+
+## Terminal chat
+
+On first use, add an API key with `deepseek login` or set the environment variable for your connection.
+Run `deepseek`, `glm`, or `qwen` from your project directory. If you downloaded the binary manually,
+use its path, for example `./deepseek-linux-x64 login` to set up the key and `./deepseek-linux-x64 chat`
+to open a chat. Use the arrow keys or left-click to select a connection and access mode.
+Scroll through the conversation with the mouse wheel or `PgUp` and `PgDn`.
+Your prompts are marked by a tinted panel with a left rail. Replies render Markdown tables, quotes,
+and fenced code as distinct blocks. Consecutive tool calls stay together, with each call's status
+on the left and its output line count on the right. Click a tool row to show or hide its details.
+You can also select a visible row with `Tab`, toggle it with `Enter`, and return to the composer with `Esc`.
+Use `Alt+Enter` or paste to enter multiple lines. The footer shows the model,
+reasoning effort, working directory, and current prompt. Set `NO_COLOR=1` to remove
+colors and text styling.
+Sessions and chat settings are stored in `~/.deepseek/cli/` by default. Use `/model` to change the model
+and `/effort` to set reasoning effort when the model supports it. [Chat setup (Russian)](docs/development.md#терминальный-чат)
 
 ## Updates and compatibility
+
+The terminal chat checks for stable releases in the background. The header shows a link when a newer
+release has a binary for your platform. Checks use a 20-hour cache. Use `deepseek chat --no-update-check`
+to skip the check for a session. To upgrade an npm installation, run `npm i -g @grigdesk/deepseek@latest`.
 
 GrigDesk checks the release manifest for its platform, architecture, minimum server version, and host contract.
 When a newer compatible release is available, choose **Update to …** in the provider card.
@@ -100,18 +130,24 @@ Stable releases require GLM admission for the bundled runtime. Each release incl
 `manifest.json` and a SHA-256 checksum for each binary.
 
 Pushes to `main` and pull requests run type and import checks. Pushing a `v*` tag
-runs the full tests and builds the release binaries.
+runs the full tests and builds the release binaries for Linux, macOS, and Windows.
+The same workflow run builds the [Android bundles](#android-bundles).
 
-В GLM `subagent` и `subagent_fork` ждут результат по умолчанию. Передайте
-`run_in_background: true` для продолжимого запуска. Spawn позволяет выбрать модель
-и усилие из каталога GLM. Fork сохраняет маршрут родителя.
+In GLM, `subagent` and `subagent_fork` wait for a result by default. Set `run_in_background: true`
+to let the subagent run in the background. When spawning an agent, you can choose its model
+and reasoning effort from the GLM catalog. A fork inherits its parent's model route.
+
+For GrigDesk-managed GLM schedules, the ELF advertises `glmManagedSchedule`.
+GrigDesk opens the target session under current permissions and authorizes each
+occurrence through its private Harness connection. The terminal flag
+`deepseek chat -p glm --mode workspace-write --schedule` uses the native timer
+in the open terminal session.
 
 ## Documentation
 
-Запустите `bin/grigdesk-dsh-ctl` без аргументов, чтобы открыть меню обслуживания.
-Наведите мышь на пункт, выберите его стрелками или колесом, чтобы увидеть пояснение под списком.
-Откройте пункт левым кликом или клавишей Enter.
-Сборка и проверка проекта показывают прогресс по этапам.
+Run `bin/grigdesk-dsh-ctl` without arguments to open the maintenance menu. Hover over an item
+or select it with the arrow keys or mouse wheel to see its description below the list.
+Open the selected item with a left click or Enter. Build and check commands show progress for each step.
 
 | Topic | Where to look |
 | :--- | :--- |

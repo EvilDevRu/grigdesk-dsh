@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { sha256File } from '../lib/node/hash.ts';
+import { componentNodeRuntimeManifest, SEA_TARGETS } from '../lib/node/nodeRuntime.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const lib = [
@@ -22,10 +23,13 @@ const lib = [
   'lib/node/seaBuild.ts',
   'lib/runtime/dataHome.ts',
   'lib/runtime/nodeVersion.ts',
+  'lib/runtime/executable.ts',
+  'lib/node/windowsProcessIdentity.ts',
 ];
 const scripts = [
   'binaryInputs.mts', 'buildBinary.mts', 'buildPayload.mts', 'buildSteps.mts',
-  'packagePayload.mts', 'prepareRuntimeDeps.mts',
+  'packagePayload.mts', 'prepareRuntimeDeps.mts', 'buildAndroid.mts', 'androidGeneration.mts',
+  'prepareAndroidNode.sh',
 ];
 
 /**
@@ -60,9 +64,9 @@ export async function binaryPackageInputs(): Promise<Record<string, string>> {
     ...await sourceFiles('src'),
     'package.json',
     'package-lock.json',
-    'build/node-runtime.json',
-    'build/node-runtime-linux-arm64.json',
-    'build/node-runtime-darwin-arm64.json',
+    'build/android/node-sea.patch',
+    'build/android/publishJournal.mjs',
+    ...SEA_TARGETS.map((target) => componentNodeRuntimeManifest('', target).split(path.sep).join('/')),
     'compatibility/glm.json',
   ].sort();
   const entries = await Promise.all(files.map(async (name) => [

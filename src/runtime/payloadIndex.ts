@@ -38,5 +38,6 @@ const codec = createPayloadCodec(invalidPayload, makeUnzip);
 export const decodePayloadIndex = codec.decodePayloadIndex;
 export const decodePayloadDescriptor = codec.decodePayloadDescriptor;
 export const consumePayloadArchive = codec.consumePayloadArchive;
+export const payloadLinkKinds = codec.payloadLinkKinds;
 
 export type { PayloadEntry, PayloadDescriptor, PayloadSink } from '../../lib/node/payloadArchive.ts';

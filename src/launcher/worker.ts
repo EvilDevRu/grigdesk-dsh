@@ -2,6 +2,7 @@ import { spawn, type StdioOptions } from 'node:child_process';
 import path from 'node:path';
 
 import { NETWORK_FAMILY_ATTEMPT_TIMEOUT_MS } from '../../lib/node/networkFamily.ts';
+import { executableName } from '../../lib/runtime/executable.ts';
 
 const nodeInputs = new Set([
   'NODE_OPTIONS',
@@ -46,6 +47,7 @@ export function workerEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv 
  */
 export async function runLauncherWorker(options: {
   directory: string;
+  executable?: string;
   entry: string;
   args: string[];
   capture?: boolean;
@@ -53,7 +55,7 @@ export async function runLauncherWorker(options: {
   const stdio: StdioOptions = options.capture
     ? ['ignore', 'pipe', 'pipe', 'ipc']
     : ['inherit', 'inherit', 'inherit', 'ipc'];
-  const child = spawn(path.join(options.directory, 'node'), [
+  const child = spawn(options.executable ?? path.join(options.directory, executableName('node')), [
     // Настройка Node родителя в отдельный worker не наследуется.
     `--network-family-autoselection-attempt-timeout=${NETWORK_FAMILY_ATTEMPT_TIMEOUT_MS}`,
     path.join(options.directory, 'worker-bootstrap.mjs'),

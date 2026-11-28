@@ -5,7 +5,8 @@ import { assertUntracked, ensureNodeArchive, publishFile, readNodeRuntime, seaHo
   from '../lib/node/nodeRuntime.ts';
 import { withWorkDirectory } from '../lib/node/files.ts';
 import { sha256File } from '../lib/node/hash.ts';
-import { nodeArchive, seaConfig } from '../lib/node/seaBuild.ts';
+import { nodeArchive, nodeExtractArgs, nodeTarExecutable, seaConfig } from '../lib/node/seaBuild.ts';
+import { executableName } from '../lib/runtime/executable.ts';
 import { createDeepSeekMetadata, manifestBytes } from '../src/runtime/metadata.ts';
 import type { DeepSeekManifest } from '../src/runtime/metadata.ts';
 import type { DeepSeekRuntimeInfo } from '../lib/chat/deepSeekBinary.ts';
@@ -90,7 +91,8 @@ export async function executeBinaryBuild(
 ): Promise<DeepSeekRuntimeInfo> {
   const host = seaHostTarget(steps.platform, steps.arch);
   const runtime = readNodeRuntime(steps.runtime, 'build/node-runtime.json');
-  const target = path.join(options.outDir, 'deepseek');
+  const executable = executableName('deepseek', steps.platform);
+  const target = path.join(options.outDir, executable);
 
   if (runtime.platform !== host) {
     throw new Error('Архив worker Node другой платформы');
@@ -105,8 +107,7 @@ export async function executeBinaryBuild(
   const node = nodeArchive(runtime);
 
   return withWorkDirectory(options.nodeCacheDir, async (work) => {
-    await steps.run('tar', ['-xJf', archive, '--strip-components=1',
-      `${node.directory}/bin/node`, `${node.directory}/LICENSE`], { cwd: work });
+    await steps.run(nodeTarExecutable(steps.platform), nodeExtractArgs(runtime, archive, true), { cwd: work });
 
     if ((await readFile(path.join(work, 'LICENSE'))).length === 0) {
       throw new Error('Отсутствует лицензия worker Node');
@@ -138,15 +139,18 @@ export async function executeBinaryBuild(
       'payload.zip': 'payload.zip',
       ...nativeAssets,
     })));
-    await steps.run(path.join(work, 'bin/node'), ['--experimental-sea-config', 'sea-config.json'], {
+    const worker = path.join(work, node.executable);
+    const candidate = path.join(work, executable);
+
+    await steps.run(worker, ['--experimental-sea-config', 'sea-config.json'], {
       cwd: work,
       env: {},
     });
-    await copyFile(path.join(work, 'bin/node'), path.join(work, 'deepseek'));
+    await copyFile(worker, candidate);
     await steps.postject(work);
-    await chmod(path.join(work, 'deepseek'), 0o755);
-    await steps.smoke(path.join(work, 'deepseek'), manifest, work);
-    await publishFile(path.join(work, 'deepseek'), target);
+    await chmod(candidate, 0o755);
+    await steps.smoke(candidate, manifest, work);
+    await publishFile(candidate, target);
 
     return manifest;
   });

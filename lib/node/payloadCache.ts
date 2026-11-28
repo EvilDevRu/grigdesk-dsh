@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { sha256File } from './hash.ts';
 import { acquireDirectoryLock, type DirectoryLockOptions } from './directoryLock.ts';
+import { portableLinkTarget } from './files.ts';
 import type { createPayloadCodec, PayloadDescriptor, PayloadEntry, PayloadSink } from './payloadArchive.ts';
 
 export interface ExtractionOptions {
@@ -30,10 +31,11 @@ export function createPayloadCache(
   invalidPayload: () => never,
   invalidCache: () => never,
 ) {
-  const { consumePayloadArchive, decodePayloadDescriptor } = codec;
+  const { consumePayloadArchive, decodePayloadDescriptor, payloadLinkKinds } = codec;
+  const windows = process.platform === 'win32';
 
   function absoluteCache(value: string): string {
-    if (!path.isAbsolute(value) || value === '/') {
+    if (!path.isAbsolute(value) || path.parse(value).root === value) {
       invalidCache();
     }
 
@@ -49,7 +51,7 @@ export function createPayloadCache(
 
     const stat = await fsp.lstat(directory);
 
-    if (!stat.isDirectory() || (stat.mode & 0o077) !== 0
+    if (!stat.isDirectory() || (!windows && (stat.mode & 0o077) !== 0)
       || (process.getuid && stat.uid !== process.getuid())) {
       invalidCache();
     }
@@ -119,9 +121,11 @@ export function createPayloadCache(
       openSink(directory, entry, write)
     ));
 
+    const kinds = windows ? payloadLinkKinds(options.payload.entries) : undefined;
+
     for (const entry of options.payload.entries) {
       if (entry.type === 'link') {
-        await fsp.symlink(entry.target, path.join(directory, entry.path));
+        await fsp.symlink(entry.target, path.join(directory, entry.path), kinds?.get(entry.path));
       }
     }
 
@@ -152,7 +156,7 @@ export function createPayloadCache(
   function inspectTree(directory: string, payload: PayloadDescriptor, links: boolean): ReadySnapshot {
     const root = fs.lstatSync(directory, { bigint: true });
 
-    if (!root.isDirectory() || (root.mode & 0o077n) !== 0n
+    if (!root.isDirectory() || (!windows && (root.mode & 0o077n) !== 0n)
       || process.getuid && root.uid !== BigInt(process.getuid())) {
       invalidPayload();
     }
@@ -177,7 +181,7 @@ export function createPayloadCache(
         const file = path.join(directory, item);
         const stat = fs.lstatSync(file, { bigint: true });
 
-        if (!selected || (stat.mode & 0o777n) !== BigInt(selected.entry.mode)) {
+        if (!selected || (!windows && (stat.mode & 0o777n) !== BigInt(selected.entry.mode))) {
           invalidPayload();
         }
 
@@ -186,7 +190,8 @@ export function createPayloadCache(
         entries[index] = fingerprint(stat);
         count += 1;
 
-        if (entry.type === 'file' && stat.isFile() && stat.size === BigInt(entry.size)) {
+        if (entry.type === 'file' && stat.isFile() && stat.size === BigInt(entry.size)
+          && (!windows || (stat.mode & 0o200n) === 0n)) {
           continue;
         }
 
@@ -196,8 +201,8 @@ export function createPayloadCache(
           if (links) {
             const resolved = path.relative(directory, fs.realpathSync(file));
 
-            if (fs.readlinkSync(file) !== entry.target || resolved === '..'
-              || resolved.startsWith('../') || path.isAbsolute(resolved)) {
+            if (portableLinkTarget(fs.readlinkSync(file)) !== entry.target || resolved === '..'
+              || resolved.startsWith(`..${path.sep}`) || path.isAbsolute(resolved)) {
               invalidPayload();
             }
           }
@@ -262,10 +267,23 @@ export function createPayloadCache(
     options: ExtractionOptions,
     snapshot: ReadySnapshot,
   ): Promise<void> {
-    const handle = await fsp.open(path.join(directory, '.ready.json'),
-      constants.O_WRONLY | constants.O_TRUNC | constants.O_NOFOLLOW);
+    const file = path.join(directory, '.ready.json');
+    const named = await fsp.lstat(file, { bigint: true });
+
+    if (!named.isFile() || named.nlink !== 1n) {
+      invalidPayload();
+    }
+
+    const handle = await fsp.open(file, constants.O_WRONLY | constants.O_NOFOLLOW);
 
     try {
+      const opened = await handle.stat({ bigint: true });
+
+      if (!opened.isFile() || opened.nlink !== 1n || opened.dev !== named.dev || opened.ino !== named.ino) {
+        invalidPayload();
+      }
+
+      await handle.truncate(0);
       await handle.writeFile(JSON.stringify({
         format: 2,
         packageId: options.packageId,
@@ -304,7 +322,7 @@ export function createPayloadCache(
         stat = await fsp.lstat(markerPath);
       }
 
-      if (!stat.isFile() || (stat.mode & 0o777) !== 0o600) {
+      if (!stat.isFile() || stat.nlink !== 1 || (!windows && (stat.mode & 0o777) !== 0o600)) {
         invalidPayload();
       }
 

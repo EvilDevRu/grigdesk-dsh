@@ -35,7 +35,8 @@ export async function apply(ctx, config) {
       return false;
     }
 
-    if (child && ['create_goal', 'update_goal', 'exit_plan_mode', 'workflow', 'ralph'].includes(tool)) {
+    if (child && (tool.startsWith('schedule_')
+      || ['create_goal', 'update_goal', 'exit_plan_mode', 'workflow', 'ralph'].includes(tool))) {
       return false;
     }
 
@@ -178,8 +179,15 @@ export async function apply(ctx, config) {
 
       const verdict = parseGlmGateProof(result.stdout.text, binding);
       const child = exec.agent.session.header.origin === 'subagent';
-      const restricted = !allowedFor(exec.name, exec.agent)
+      let restricted = !allowedFor(exec.name, exec.agent)
         || child && exec.arguments?.sandbox_permissions !== undefined;
+
+      if (verdict.decision === 'allow' && !restricted
+        && ['schedule_edit', 'schedule_view'].includes(exec.name)) {
+        const task = await ctx.get('schedule')?.view({ id: exec.arguments?.id });
+
+        restricted = task?.target?.kind !== 'session' || task.target.sessionId !== binding.sessionId;
+      }
       const proof = verdict.decision === 'allow' && restricted
         ? { ...verdict, decision: 'deny', reason: 'Вызов выходит за права агента GLM' }
         : verdict;
@@ -289,6 +297,14 @@ export async function apply(ctx, config) {
         if (resumed) {
           state.descriptor = agent.session.ownEvents().find((event) =>
             event.type === 'subagent/descriptor' && event.data.mode === 'continuable')?.data;
+        }
+      } else {
+        // После падения прежний хост мог успеть зарезервировать срок.
+        // Восстановленный inbox не должен повторно доставлять его поручение.
+        for (const message of [...agent.inbox.nextTurn, ...agent.inbox.nextStep]) {
+          if (message.source.kind === 'schedule') {
+            agent.inbox.remove(message.id);
+          }
         }
       }
 

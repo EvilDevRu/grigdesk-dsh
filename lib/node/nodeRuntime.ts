@@ -14,31 +14,26 @@ import { nodeArchive } from './seaBuild.ts';
  * остаются в их собственных модулях.
  */
 
+export const SEA_TARGETS = ['linux-x64', 'linux-arm64', 'darwin-arm64', 'win32-x64', 'win32-arm64'] as const;
+
 export interface NodeRuntime {
   version: string;
-  platform: 'linux-x64' | 'linux-arm64' | 'darwin-arm64';
+  platform: typeof SEA_TARGETS[number];
   sha256: string;
 }
 
 /**
  * Связывает платформу сборки с нативным архивом до запуска инструментов.
- * Сборка под чужую архитектуру не допускается. Linux ARM64 допущен и для
- * общего дистрибутива (сервер и DeepSeek), не только для собственного сервера.
+ * Каждый сборщик использует архив своей платформы и архитектуры.
  */
 export function seaHostTarget(
   platform: string = process.platform,
   arch: string = process.arch,
 ): NodeRuntime['platform'] {
-  if (platform === 'linux' && arch === 'x64') {
-    return 'linux-x64';
-  }
+  const target = SEA_TARGETS.find((candidate) => candidate === `${platform}-${arch}`);
 
-  if (platform === 'linux' && arch === 'arm64') {
-    return 'linux-arm64';
-  }
-
-  if (platform === 'darwin' && arch === 'arm64') {
-    return 'darwin-arm64';
+  if (target) {
+    return target;
   }
 
   throw new Error(`Сборка SEA не поддерживается на ${platform}-${arch}`);
@@ -106,15 +101,14 @@ export function readNodeRuntime(value: unknown, manifest: string): NodeRuntime {
 
   if (!record || typeof record !== 'object'
     || typeof record.version !== 'string' || !/^24\.[0-9]+\.[0-9]+$/.test(record.version)
-    || (record.platform !== 'linux-x64' && record.platform !== 'linux-arm64'
-      && record.platform !== 'darwin-arm64')
+    || !SEA_TARGETS.some((target) => target === record.platform)
     || typeof record.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.sha256)) {
     throw new Error(`Некорректный ${manifest}`);
   }
 
   return {
     version: record.version,
-    platform: record.platform,
+    platform: record.platform!,
     sha256: record.sha256,
   };
 }

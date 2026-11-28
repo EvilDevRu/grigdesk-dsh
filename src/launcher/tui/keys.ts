@@ -7,6 +7,7 @@
 export type Key =
   | { kind: 'text'; value: string }
   | { kind: 'enter' }
+  | { kind: 'newline' }
   | { kind: 'backspace' }
   | { kind: 'delete' }
   | { kind: 'tab' }
@@ -153,6 +154,11 @@ export class KeyDecoder {
    */
   #escape(due: boolean): Key | null | undefined {
     const input = this.#pending;
+    if (input[1] === '\r' || input[1] === '\n') {
+      this.#pending = input.slice(2);
+      return { kind: 'newline' };
+    }
+
     const match = /^\x1b(?:\[|O)([0-?]*[ -/]*)([@-~])/u.exec(input);
 
     if (match === null) {
@@ -218,6 +224,9 @@ export class KeyDecoder {
         }
 
         return undefined;
+      case 'u':
+        return parameters === '13;3' ? { kind: 'newline' }
+          : parameters === '13' ? { kind: 'enter' } : undefined;
       case 'M':
         return input.startsWith('\x1b[') ? this.#mouse(parameters ?? '') : undefined;
       default:

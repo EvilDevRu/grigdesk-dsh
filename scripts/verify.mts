@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { executableName } from '../lib/runtime/executable.ts';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const args = process.argv.slice(2);
@@ -10,7 +11,7 @@ if (args.length > 0 && !binary) {
   process.stderr.write('Использование: npm run verify -- [--binary <ELF>]\n');
   process.exitCode = 2;
 } else {
-  const child = spawn(binary ?? path.join(root, 'bin/deepseek'), ['--verify', '--json'], {
+  const child = spawn(binary ?? path.join(root, 'bin', executableName('deepseek')), ['--verify', '--json'], {
     stdio: 'inherit',
   });
 

@@ -10,6 +10,7 @@ import { acquireDirectoryLock } from '../lib/node/directoryLock.ts';
 import { sha256, sha256File } from '../lib/node/hash.ts';
 import { configureDarwinBuildProcessHelper } from '../lib/node/processIdentity.ts';
 import { seaHostTarget, type NodeRuntime } from '../lib/node/nodeRuntime.ts';
+import { executableName } from '../lib/runtime/executable.ts';
 import { readWorkerArtifact } from '../src/runtime/artifact.ts';
 import { GLM_COMPATIBILITY } from '../src/runtime/glmCompatibility.ts';
 import { createDeepSeekMetadata, packageIdFor, type DeepSeekManifest } from '../src/runtime/metadata.ts';
@@ -75,7 +76,7 @@ async function generation(work: string, options: BinaryBuildOptions, target: Nod
 
   if (actual.version !== prepared.version || actual.abi !== prepared.abi
     || seaHostTarget(actual.platform, actual.arch) !== target
-    || await sha256File(path.join(work, 'bin/node')) !== prepared.nodeSha256) {
+    || await sha256File(buildWorkerPath(work)) !== prepared.nodeSha256) {
     throw new Error('Dependencies подготовлены другим worker Node');
   }
 
@@ -117,10 +118,18 @@ async function generation(work: string, options: BinaryBuildOptions, target: Nod
         '--runtime-deps-dir', prepared.directory,
         '--output-dir', directory, '--read-only'], {
         env: {
-          PATH: `${path.dirname(node)}:/usr/bin:/bin`,
+          PATH: [path.dirname(node), process.platform === 'win32' ? process.env.PATH ?? '' : '/usr/bin:/bin']
+            .join(path.delimiter),
           HOME: home,
           TMPDIR: temporary,
           XDG_CACHE_HOME: path.join(options.nodeCacheDir, 'build-cache'),
+          ...process.platform === 'win32' ? {
+            SystemRoot: process.env.SystemRoot,
+            ComSpec: process.env.ComSpec,
+            TEMP: temporary,
+            TMP: temporary,
+            USERPROFILE: home,
+          } : {},
         },
         timeout: 300000,
         maxBuffer: 16 * 1024 * 1024,
@@ -141,6 +150,10 @@ async function generation(work: string, options: BinaryBuildOptions, target: Nod
 
     throw error;
   }
+}
+
+function buildWorkerPath(work: string): string {
+  return path.join(work, process.platform === 'win32' ? 'node.exe' : 'bin/node');
 }
 
 /**
@@ -164,6 +177,75 @@ console.log(JSON.stringify({ write, read: Array.from({ length: write + 1 }, (_, 
 }
 
 /**
+ * Упаковывает уже собранное поколение и берёт форматы журнала из его JS-каталога.
+ * В кросс-сборке этот каталог читает Node хоста, а в архив попадает Node цели.
+ */
+export async function packBinaryGeneration(work: string, built: {
+  directory: string;
+  artifact: Awaited<ReturnType<typeof readWorkerArtifact>>['artifact'];
+  worker: Parameters<typeof readWorkerArtifact>[1];
+  nodeSha256: string;
+}, workerNode: string, journalNode = workerNode) {
+  const raw = JSON.parse(await readFile(path.join(built.directory, 'runtime.json'), 'utf8'));
+  const payload = await packagePayload({
+    generationDirectory: built.directory,
+    workerNode,
+    nodeLicense: path.join(work, 'LICENSE'),
+    workerBootstrap: path.join(work, 'worker-bootstrap.mjs'),
+    workerVerify: path.join(work, 'worker-verify.mjs'),
+    worker: built.worker,
+    outputFile: path.join(work, 'payload.zip'),
+  });
+
+  return {
+    format: 1,
+    upstreamVersion: built.artifact.source.version,
+    buildId: built.artifact.buildId,
+    runtimeVersion: built.artifact.runtimeVersion,
+    hostContract: built.artifact.hostContract,
+    journal: await journalContract(journalNode, built.directory),
+    platform: built.worker.platform,
+    arch: built.worker.arch,
+    workerNode: {
+      version: built.worker.nodeVersion,
+      abi: built.worker.nativeAbi,
+      sha256: built.nodeSha256,
+    },
+    capabilities: built.artifact.capabilities,
+    glm: {
+      inputs: {
+        source: { commit: raw.source.commit },
+        inputIdentity: {
+          composition: raw.inputIdentity.composition,
+          dependencyLock: raw.inputIdentity.dependencyLock,
+        },
+        llmPiAi: raw.llmPiAi,
+      },
+    },
+    payload,
+  };
+}
+
+/**
+ * Привязывает поколение и ресурс payload к общей формуле identity и допуска.
+ * Нативные сборки и Android получают одинаковый публичный контракт.
+ */
+export async function sealBinaryPayload(work: string, base: Record<string, unknown>, binaryVersion?: string) {
+  const version = JSON.parse(await readFile(path.join(deepSeekPackagePaths().root, 'package.json'), 'utf8'));
+  const raw = {
+    ...base,
+    binaryVersion: binaryVersion ?? version.version,
+    launcher: await sha256File(path.join(work, 'bundle.cjs')),
+    packageInputs: await binaryPackageInputs(),
+    glm: { ...(base.glm as object), ...GLM_COMPATIBILITY },
+  };
+  const payload = decodePayloadDescriptor(base.payload);
+  const known = decodeDeepSeekRuntimeInfo({ ...raw, packageId: packageIdFor(raw) });
+
+  return createDeepSeekMetadata({ ...raw, ...known, payload });
+}
+
+/**
  * Полный manifest связывает generation, Node, launcher, codecs, admission и bytes архива.
  * Sidecar остаётся build-артефактом для --payload; установленному ELF соседние файлы не нужны.
  */
@@ -172,9 +254,6 @@ export async function prepareBinaryPayload(
   options: BinaryBuildOptions,
   target = seaHostTarget(),
 ): Promise<DeepSeekManifest> {
-  const paths = deepSeekPackagePaths();
-  const compatibility = GLM_COMPATIBILITY;
-  const manifest = JSON.parse(await readFile(path.join(paths.root, 'package.json'), 'utf8'));
   let base: Record<string, unknown>;
 
   if (options.payload) {
@@ -187,63 +266,14 @@ export async function prepareBinaryPayload(
     const built = await generation(work, options, target);
 
     try {
-      const raw = JSON.parse(await readFile(path.join(built.directory, 'runtime.json'), 'utf8'));
-      const payload = await packagePayload({
-        generationDirectory: built.directory,
-        workerNode: path.join(work, 'bin/node'),
-        nodeLicense: path.join(work, 'LICENSE'),
-        workerBootstrap: path.join(work, 'worker-bootstrap.mjs'),
-        workerVerify: path.join(work, 'worker-verify.mjs'),
-        worker: built.worker,
-        outputFile: path.join(work, 'payload.zip'),
-      });
-
-      base = {
-        format: 1,
-        upstreamVersion: built.artifact.source.version,
-        buildId: built.artifact.buildId,
-        runtimeVersion: built.artifact.runtimeVersion,
-        hostContract: built.artifact.hostContract,
-        journal: await journalContract(path.join(work, 'bin/node'), built.directory),
-        platform: built.worker.platform,
-        arch: built.worker.arch,
-        workerNode: {
-          version: built.worker.nodeVersion,
-          abi: built.worker.nativeAbi,
-          sha256: built.nodeSha256,
-        },
-        capabilities: built.artifact.capabilities,
-        glm: {
-          inputs: {
-            source: { commit: raw.source.commit },
-            inputIdentity: {
-              composition: raw.inputIdentity.composition,
-              dependencyLock: raw.inputIdentity.dependencyLock,
-            },
-            llmPiAi: raw.llmPiAi,
-          },
-        },
-        payload,
-      };
+      base = await packBinaryGeneration(work, built, buildWorkerPath(work));
     } finally {
       await built.lock.release();
     }
   }
 
-  const raw = {
-    ...base,
-    binaryVersion: options.binaryVersion ?? manifest.version,
-    launcher: await sha256File(path.join(work, 'bundle.cjs')),
-    packageInputs: await binaryPackageInputs(),
-    glm: { ...(base.glm as object), ...compatibility },
-  };
-  const payload = decodePayloadDescriptor(base.payload);
-  const known = decodeDeepSeekRuntimeInfo({ ...raw, packageId: packageIdFor(raw) });
-  const result = createDeepSeekMetadata({
-    ...raw,
-    ...known,
-    payload,
-  });
+  const result = await sealBinaryPayload(work, base, options.binaryVersion ?? undefined);
+  const { payload } = result;
   const payloadRoot = path.join(options.nodeCacheDir, 'payloads', payload.sha256);
 
   await mkdir(payloadRoot, { recursive: true, mode: 0o700 });

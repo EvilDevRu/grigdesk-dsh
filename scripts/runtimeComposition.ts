@@ -329,7 +329,7 @@ export async function discoverRuntimeClosure(
       }
 
       const targetRoot = target.endsWith('.json') ? path.dirname(target) : target;
-      const relative = path.relative(sourceDir, targetRoot);
+      const relative = path.relative(sourceDir, targetRoot).split(path.sep).join('/');
       const targetPackage = byRoot.get(relative);
 
       if (targetPackage && (!omitBundlePackage(targetPackage.name)

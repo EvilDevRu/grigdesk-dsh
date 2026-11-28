@@ -1,7 +1,7 @@
 diff --git a/packages/core/agent-loop/src/agent.ts b/packages/core/agent-loop/src/agent.ts
 --- a/packages/core/agent-loop/src/agent.ts
 +++ b/packages/core/agent-loop/src/agent.ts
-@@ -312,7 +312,12 @@
+@@ -312,7 +312,21 @@
          toolSet.dispose()
          return decision
        }
@@ -10,7 +10,16 @@ diff --git a/packages/core/agent-loop/src/agent.ts b/packages/core/agent-loop/sr
 +      const visible = this.loopCtx.get('grigdeskGlmToolVisible' as never) as
 +        ((name: string, agent: Agent) => boolean) | undefined
 +      if (!visible) return { ...decision, assembly, selection, toolSet }
-+      const tools = assembly.tools.filter(({ name }) => visible(name, this))
++      let tools = assembly.tools.filter(({ name }) => visible(name, this))
++      if (tools.some(({ name }) => name === 'read_image')) {
++        const model = await this.loopCtx.llm.resolveModelInfo(selection.provider, selection.model, signal)
++          .catch(() => undefined)
++        signal.throwIfAborted()
++        if (!model?.inputModalities?.includes('image')) {
++          tools = tools.filter(({ name }) => name !== 'read_image')
++        }
++      }
++
 +      return { ...decision, assembly: { ...assembly, tools }, selection, toolSet }
      } catch (error: unknown) {
        toolSet.dispose()

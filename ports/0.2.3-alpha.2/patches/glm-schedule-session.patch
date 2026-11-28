@@ -1,7 +1,48 @@
 diff --git a/packages/schedule/schedule/src/index.ts b/packages/schedule/schedule/src/index.ts
 --- a/packages/schedule/schedule/src/index.ts
 +++ b/packages/schedule/schedule/src/index.ts
-@@ -346,6 +346,11 @@
+@@ -79,6 +79,7 @@
+ 
+ /** Configuration for the Host Schedule domain. */
+ export interface Config {
++  grigdeskManaged?: boolean
+   /**
+    * Delivery-history window retained per task, in days; omission defaults to 30.
+    * Pruning happens when an acknowledgment is appended, and `lastDelivery` is always retained.
+@@ -225,6 +226,7 @@
+   static inject = ['agents', 'sessions', 'storageDomain', 'sessionPersistence']
+ 
+   static Config: z<Config> = z.object({
++    grigdeskManaged: z.boolean().default(false),
+     deliveryHistoryDays: z.number().step(1).min(1).max(3650).default(DEFAULT_DELIVERY_HISTORY_DAYS),
+     deliveryHistoryRecords: z.number().step(1).min(1).max(10_000).default(DEFAULT_DELIVERY_HISTORY_RECORDS),
+     newSessionIntervalSeconds: z.number().step(1).min(MIN_EVERY_INTERVAL_SECONDS).max(604_800)
+@@ -240,6 +242,7 @@
+   private runtime: ScheduleRuntime | undefined
+   private resolveWebAgent: ((sessionId: SessionId) => Promise<Agent>) | undefined
+   private stopping = false
++  private readonly grigdeskManaged: boolean
+ 
+   /**
+    * @param ctx - Host services owning storage, dispatch, and Session restoration.
+@@ -247,6 +250,7 @@
+    */
+   constructor(ctx: Context, config: Config) {
+     super(ctx, 'schedule')
++    this.grigdeskManaged = config.grigdeskManaged === true
+     ctx.inject(['sessionController'], (webCtx) => {
+       webCtx.effect(() => {
+         this.resolveWebAgent = async (sessionId) => {
+@@ -313,7 +317,7 @@
+         (sessionId) => {
+           if (this.resolveWebAgent === undefined) throw new Error('schedule: no Session activation provider')
+           return this.resolveWebAgent(sessionId)
+-        })
++        }, this.grigdeskManaged)
+       this.runtime.requestDrive()
+       return cleanup
+     })
+@@ -346,6 +350,35 @@
      await this.initialized
    }
  
@@ -10,10 +51,34 @@ diff --git a/packages/schedule/schedule/src/index.ts b/packages/schedule/schedul
 +    this.runtime?.requestDrive()
 +  }
 +
++  /** Схема инструментов учитывает режим хоста уже при монтировании пресета. */
++  get managedByGrigDesk(): boolean {
++    return this.grigdeskManaged
++  }
++
++  /**
++   * GrigDesk поднимает уже проверенную основную сессию под текущими правами.
++   * Этот RPC не восстанавливает сессии и не меняет расписание при чтении.
++   */
++  @Remote('grigdeskPoll')
++  async grigdeskPoll(
++    request: { sessionId: SessionId, dispatch: boolean },
++    signal?: AbortSignal,
++  ): Promise<{ nextAt: number | null, dispatched: boolean }> {
++    await this.initialized
++    const agent = this.ctx.agents.get(request.sessionId)
++    if (!this.grigdeskManaged || !this.runtime || !agent || delegationDepthOf(agent) !== 0
++      || typeof request.dispatch !== 'boolean') {
++      throw new Error('Требуется основная сессия с расписанием под управлением GrigDesk')
++    }
++
++    return this.runtime.pollManaged(agent, request.dispatch, signal)
++  }
++
    /** Read effective delivery limits without loading or activating a task.
     * @returns The configured minimum spacing between deliveries that each create a Session, in seconds.
     */
-@@ -412,9 +417,11 @@
+@@ -412,9 +445,11 @@
     * @param request - Optional activity filter, page size, and offset.
     * @returns The requested page and total matching task count.
     */
@@ -26,23 +91,125 @@ diff --git a/packages/schedule/schedule/src/index.ts b/packages/schedule/schedul
        .filter(entry => request.active === undefined || (entry.status === 'active') === request.active)
      const page = items.slice(offset, offset + limit)
      return { items: page, shown: page.length, total: items.length, limit, offset }
+@@ -494,6 +529,7 @@
+    */
+   @Remote('run')
+   async run(request: ScheduleRunRequest, signal?: AbortSignal): Promise<ScheduleRunResult> {
++    if (this.grigdeskManaged) throw new Error('Доставкой расписания управляет GrigDesk')
+     await this.getDomain()
+     /* v8 ignore next -- initialization installs the runtime before the domain becomes readable. */
+     if (this.runtime === undefined) throw new Error('Schedule runtime is unavailable')
+diff --git a/packages/schedule/schedule/src/runtime.ts b/packages/schedule/schedule/src/runtime.ts
+--- a/packages/schedule/schedule/src/runtime.ts
++++ b/packages/schedule/schedule/src/runtime.ts
+@@ -89,6 +89,7 @@
+     private readonly changed: () => void,
+     private readonly limits: ScheduleRuntimeLimits,
+     private readonly resolveAgent: (sessionId: SessionIdType) => Promise<Agent>,
++    private readonly grigdeskManaged = false,
+   ) {}
+ 
+   /**
+@@ -96,7 +97,7 @@
+    * Dispatch failures are logged; refused admission does not retry automatically.
+    */
+   requestDrive(): void {
+-    if (this.stopping) return
++    if (this.stopping || this.grigdeskManaged) return
+     this.requested = true
+     this.clearTimer()
+     if (this.running !== undefined) return
+@@ -124,6 +125,43 @@
+     })
+   }
+ 
++  /**
++   * Хост выбирает момент доставки под своей блокировкой и владеет процессом агента.
++   * Сначала сохраняем продвижение правила, затем разрешаем агенту выполнить поручение.
++   */
++  async pollManaged(agent: Agent, dispatch: boolean, signal?: AbortSignal): Promise<{
++    nextAt: number | null, dispatched: boolean
++  }> {
++    return this.ctx.agents.withoutInitiator(() => this.transact(async () => {
++      signal?.throwIfAborted()
++      const sessionId = agent.session.id
++      const candidates = this.tasks().filter(task => task.status === 'active'
++        && task.target.kind === 'session' && task.target.sessionId === sessionId)
++        .map(task => ({ task, at: Math.max(Date.parse(task.record.scheduledAt), this.nextAdmissionAt(task)) }))
++        .sort((a, b) => a.at - b.at)
++      const first = candidates[0]
++      const now = Date.now()
++      if (!dispatch || !first || first.at > now || this.stopping || agent.status !== 'idle') {
++        return { nextAt: first?.at ?? null, dispatched: false }
++      }
++
++      const { task } = first
++      const occurrence = isRecurringScheduleRecord(task.record)
++        ? resolveRecurringOccurrence(task.record, now) : { occurrenceAt: task.record.scheduledAt }
++      const text = renderReminderFraming({ ...task.record, scheduledAt: occurrence.occurrenceAt })
++      const message = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'schedule' } })
++      await this.commit(this.advanced(task, occurrence, {
++        scheduledAt: occurrence.occurrenceAt, deliveredAt: new Date(now).toISOString(),
++        messageId: message.id, targetSessionId: sessionId,
++      }))
++
++      signal?.throwIfAborted()
++      if (this.stopping) throw new Error('Доставка расписания остановлена')
++      agent.followup(message)
++      return { nextAt: null, dispatched: true }
++    }))
++  }
++
+   /** Stop the timer and drain an accepted delivery before storage closes. */
+   async dispose(): Promise<void> {
+     this.stopping = true
 diff --git a/packages/schedule/tool-schedule/src/index.ts b/packages/schedule/tool-schedule/src/index.ts
 --- a/packages/schedule/tool-schedule/src/index.ts
 +++ b/packages/schedule/tool-schedule/src/index.ts
-@@ -31,6 +31,12 @@
-   ScheduleCatalogEntry, ScheduleDeliveryReceipt, ScheduleRecord, SubagentSessionError,
+@@ -32,6 +32,12 @@
  } from '@deepseek-ai/dsh-schedule'
  import { brandString } from '@deepseek-ai/dsh-brand'
-+
+ 
 +declare module '@deepseek-ai/cordis' {
 +  interface Context {
 +    grigdeskScheduleSessionOnly: boolean
 +  }
 +}
- 
++
  /** Plugin name registered with the Loader. */
  export const name = 'tool-schedule'
-@@ -413,11 +419,12 @@
+ 
+@@ -373,7 +379,10 @@
+   })
+ 
+   // Plugin configuration is fixed for the life of the Host service, so the description is read once.
+-  const targetDescription = targetHelp(ctx.schedule.deliveryLimits().newSessionIntervalSeconds)
++  const sessionOnly = ctx.schedule.managedByGrigDesk || ctx.get('grigdeskScheduleSessionOnly')
++  const targetChoices = sessionOnly ? ['this_session'] as const : TARGET_CHOICES
++  const targetDescription = sessionOnly ? 'Deliver to this session.' :
++    targetHelp(ctx.schedule.deliveryLimits().newSessionIntervalSeconds)
+ 
+   ctx.tools.register(defineTool({
+     name: 'schedule_create',
+@@ -386,7 +395,7 @@
+       },
+       prompt: { type: 'string', required: true, description: 'Instruction delivered at each occurrence.' },
+       rrule: { type: 'string', required: true, description: RRULE_HELP },
+-      target: { type: 'string', required: true, enum: TARGET_CHOICES, description: targetDescription },
++      target: { type: 'string', required: true, enum: targetChoices, description: targetDescription },
+     },
+     output: { schema: CREATE_OUTPUT_SCHEMA, render: renderValue },
+     execute(args, exec) {
+@@ -399,7 +408,7 @@
+ 
+   ctx.tools.register(defineTool({
+     name: 'schedule_list',
+-    description: LIST_DESCRIPTION,
++    description: sessionOnly ? 'List scheduled tasks owned by this session.' : LIST_DESCRIPTION,
+     parameters: {
+       active: {
+         type: 'boolean',
+@@ -413,11 +422,12 @@
      isConcurrencySafe: () => true,
      execute({ active, limit, offset }, exec) {
        // The open parameter root admits unknown keys; only the declared page fields select the Host-wide list.
@@ -52,8 +219,17 @@ diff --git a/packages/schedule/tool-schedule/src/index.ts b/packages/schedule/to
          ...(limit === undefined ? {} : { limit }),
          ...(offset === undefined ? {} : { offset }),
 -      }).then(page => ({ ...page, items: page.items.map(modelTask) })))
-+      }, ctx.get('grigdeskScheduleSessionOnly') ? agent.session.id : undefined)
++      }, sessionOnly ? agent.session.id : undefined)
 +        .then(page => ({ ...page, items: page.items.map(modelTask) })))
      },
      presentCall: () => present('List scheduled tasks', 'read'),
    }))
+@@ -452,7 +462,7 @@
+       title: { type: 'string', description: TITLE_HELP },
+       prompt: { type: 'string', description: 'New instruction delivered at each occurrence.' },
+       rrule: { type: 'string', description: 'New recurrence in the schedule_create rrule format.' },
+-      target: { type: 'string', enum: TARGET_CHOICES, description: 'Omit to retain the destination and its creation settings. '
++      target: { type: 'string', enum: targetChoices, description: 'Omit to retain the destination and its creation settings. '
+         + 'Providing target replaces them; new_once reserves a different Session. New targets capture this Session\'s '
+         + 'working directory and preset. Choices are the same as schedule_create.' },
+       active: { type: 'boolean', description: 'false pauses the task; true resumes only if its timing has a future occurrence. '

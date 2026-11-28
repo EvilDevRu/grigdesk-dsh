@@ -12,6 +12,7 @@ import {
 } from '../lib/node/nodeRuntime.ts';
 import { stageDarwinProcessAssets } from '../lib/node/processIdentity.ts';
 import { downloadFile, injectSea } from '../lib/node/seaBuild.ts';
+import { executableName } from '../lib/runtime/executable.ts';
 
 import { prepareBinaryPayload } from './buildPayload.mts';
 import { executeBinaryBuild, parseBuildArgs, type BinaryBuildOptions } from './buildSteps.mts';
@@ -23,7 +24,7 @@ const packageDir = fileURLToPath(new URL('..', import.meta.url));
  * Все три entry собираются внутри work, готовый ELF не импортирует исходники или npm deps.
  * CJS-launcher не использует snapshot, worker bootstrap и verifier исполняются обычным Node.
  */
-async function bundle(work: string): Promise<void> {
+export async function bundleBinaryEntries(work: string): Promise<void> {
   for (const [entry, output, format] of [
     ['src/launcher/main.ts', 'bundle.cjs', 'cjs'],
     ['src/launcher/workerBootstrap.ts', 'worker-bootstrap.mjs', 'esm'],
@@ -57,6 +58,7 @@ async function bundle(work: string): Promise<void> {
 function smokeEnvironment(): NodeJS.ProcessEnv {
   return {
     PATH: '',
+    ...process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {},
     ...(process.env.GRIGDESK_DSH_LAUNCHER_TRACE ? { GRIGDESK_DSH_LAUNCHER_TRACE: '1' } : {}),
   };
 }
@@ -73,7 +75,7 @@ export async function buildDeepSeekBinary(options: BinaryBuildOptions) {
     defaultBinaryVersion: manifest.version,
     download: downloadFile,
     run: (command, args, input) => run(command, args, { ...input, maxBuffer: 4 * 1024 * 1024 }),
-    bundle,
+    bundle: bundleBinaryEntries,
     prepare: (work, buildOptions) => prepareBinaryPayload(work, buildOptions, target),
     postject: async (work) => {
       const root = path.join(packageDir, 'node_modules/postject');
@@ -85,7 +87,7 @@ export async function buildDeepSeekBinary(options: BinaryBuildOptions) {
         work,
         node: process.execPath,
         postject: cli,
-        executable: 'deepseek',
+        executable: executableName('deepseek'),
         fuse: SEA_FUSE,
         run: (file, args, options) => run(file, args, { ...options, maxBuffer: 4 * 1024 * 1024 }),
       });

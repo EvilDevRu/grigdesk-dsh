@@ -2,7 +2,7 @@
   "name": "grigdesk-dsh",
   "private": true,
   "type": "module",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Автономная поставка DeepSeek Harness для GrigDesk: сборка ELF, проверка, допуск GLM и установка",
   "license": "MIT",
   "engines": {

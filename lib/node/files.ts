@@ -11,6 +11,14 @@ export function readOnlyFileMode(mode: number): number {
 }
 
 /**
+ * Индексы записывают разделитель '/', NTFS возвращает разделитель '\\'.
+ * В Unix обратная косая остаётся частью имени и проходит обычную проверку пути.
+ */
+export function portableLinkTarget(target: string): string {
+  return process.platform === 'win32' ? target.replaceAll('\\', '/') : target;
+}
+
+/**
  * Готовое собственное дерево получает read-only файлы и каталоги владельца 0700.
  * Ссылки не обходятся; хэши generation нужно вычислять после этого изменения modes.
  */

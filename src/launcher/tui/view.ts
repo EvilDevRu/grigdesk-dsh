@@ -4,12 +4,14 @@
  */
 import type { ReadStream, WriteStream } from 'node:tty';
 
+import type { UpdateNotice } from '../updateCheck.ts';
 import { KeyDecoder, type Key } from './keys.ts';
+import type { Style } from './palette.ts';
 import {
-  amend, append, caretAt, caretRow, createScreen, diff, inputLines, render, setInput,
-  type Frame, type SelectModal,
+  amend, append, caretAt, caretRow, composerPadded, createScreen, diff, inputLines, render, setInput,
+  type ChatStatus, type Frame, type SelectModal, type Tool, type ToolBlock,
 } from './screen.ts';
-import { clean, graphemes, singleLine } from './text.ts';
+import { clean, graphemes } from './text.ts';
 
 export interface Choice<Value extends string = string> {
   value: Value;
@@ -17,14 +19,16 @@ export interface Choice<Value extends string = string> {
 }
 
 export interface TuiView {
-  print(text: string): void;
-  stream(text: string): void;
+  print(text: string, style?: Style, literal?: boolean): void;
+  stream(text: string, messageId?: string): void;
   note(text: string): void;
-  amend(text: string): void;
-  status(title: string): void;
+  tool(tool: Tool, block?: ToolBlock): ToolBlock;
+  status(value: ChatStatus): void;
+  task(text: string): void;
   busy(text: string | null): void;
   hint(text: string): void;
-  ask(prompt: string, signal?: AbortSignal): Promise<string>;
+  updateNotice(notice: UpdateNotice | null): void;
+  ask(prompt: string, signal?: AbortSignal, style?: Style): Promise<string>;
   /** Esc возвращает текущее значение, если оно задано. */
   pick<Value extends string>(
     title: string, choices: readonly Choice<Value>[], current?: Value,
@@ -59,12 +63,13 @@ export function createTuiView(options: {
   signal: AbortSignal;
   onInterrupt(): void;
   title?: string;
+  color?: boolean;
 }): TuiView {
   const { stdin, stdout } = options;
   const decoder = new KeyDecoder();
-  const model = createScreen(options.title ?? 'Терминальный чат');
+  const model = createScreen(options.title);
   model.editing = false;
-  model.color = process.env.NO_COLOR === undefined;
+  model.color &&= options.color !== false;
 
   const history: string[] = [];
   let historyIndex = -1;
@@ -73,6 +78,7 @@ export function createTuiView(options: {
   let scheduled = false;
   let closed = false;
   let streaming = false;
+  let streamingId: string | undefined;
   let modal: Modal | null = null;
   let waiter: InputWaiter | null = null;
   let width = stdout.columns || 80;
@@ -102,7 +108,12 @@ export function createTuiView(options: {
       scheduled = false;
 
       if (!closed) {
-        const next = render(model, width, height);
+        let next = render(model, width, height);
+
+        if (model.toolFocus && !next.tools?.some(({ block }) => block === model.toolFocus)) {
+          model.toolFocus = null;
+          next = render(model, width, height);
+        }
 
         if (modal && next.select) {
           modal.screen.offset = next.select.first;
@@ -178,10 +189,13 @@ export function createTuiView(options: {
     if (key.kind === 'pointer') {
       if (key.action !== 'press') {
         scroll(key.action === 'up' ? -3 : 3);
+      } else if (drawnModal === null && toggleTool(key)) {
+        return;
       } else if (waiter && drawnModal === null && frame?.input) {
         const row = frame.input.lines[key.row - frame.input.row];
 
         if (row && key.column <= width) {
+          model.toolFocus = null;
           model.caret = caretAt(row, key.column);
         }
       }
@@ -189,9 +203,56 @@ export function createTuiView(options: {
       return;
     }
 
+    if (key.kind === 'tab' && !waiter?.prompt && drawnModal === null) {
+      const visible = [...new Set(frame?.tools?.map(({ block }) => block))];
+      const index = model.toolFocus ? visible.indexOf(model.toolFocus) : -1;
+
+      model.toolFocus = visible[index + 1] ?? null;
+      return;
+    }
+
+    if (model.toolFocus) {
+      if (key.kind === 'enter') {
+        toggleTool();
+        return;
+      }
+
+      model.toolFocus = null;
+
+      if (key.kind === 'ctrl' && key.key === 'escape') {
+        return;
+      }
+    }
+
     if (waiter) {
       inputKey(key);
     }
+  }
+
+  /**
+   * Клик и Enter работают по последнему кадру. При развороте оставляем
+   * место под результат, сохраняя сам блок в видимой части истории.
+   */
+  function toggleTool(pointer?: Extract<Key, { kind: 'pointer' }>): boolean {
+    if (!frame || waiter?.prompt) {
+      return false;
+    }
+
+    const area = frame.tools?.find(({ block, left, right, row }) =>
+      pointer ? pointer.row === row && pointer.column >= left && pointer.column <= right
+        : block === model.toolFocus);
+
+    if (!area) {
+      return false;
+    }
+
+    area.block.expanded = !area.block.expanded;
+    model.toolFocus = pointer ? null : area.block;
+    const { top, page } = frame.history;
+
+    model.scroll = area.block.expanded ? Math.max(top, area.index - Math.floor(page / 2)) : top;
+
+    return true;
   }
 
   /**
@@ -287,7 +348,7 @@ export function createTuiView(options: {
    */
   function replace(start: number, end: number, value: string): void {
     const glyphs = graphemes(model.input);
-    const prefix = glyphs.slice(0, start).join('') + singleLine(value);
+    const prefix = glyphs.slice(0, start).join('') + clean(value);
 
     setInput(model, prefix + glyphs.slice(end).join(''), graphemes(prefix).length);
     historyIndex = -1;
@@ -298,7 +359,7 @@ export function createTuiView(options: {
    * обычном вводе они открывают историю отправленных запросов.
    */
   function vertical(direction: -1 | 1): void {
-    const lines = inputLines(model, width);
+    const lines = inputLines(model, width, composerPadded(width, height));
     const index = caretRow(lines, model.caret);
     const target = lines[index + direction];
 
@@ -306,10 +367,11 @@ export function createTuiView(options: {
       const current = lines[index]!;
 
       const column = current.columns[model.caret - current.start] ?? 1;
+      const last = target.start + target.columns.length - 1;
       const nextRow = lines[index + direction + 1];
-      const last = nextRow && nextRow.start > target.start ? nextRow.start - 1 : Infinity;
+      const limit = nextRow?.start === last ? Math.max(target.start, last - 1) : last;
 
-      model.caret = Math.min(caretAt(target, column), last);
+      model.caret = Math.min(caretAt(target, column), limit);
     } else if (!waiter?.prompt && history.length && (historyIndex !== -1 || !model.input && direction < 0)) {
       const from = historyIndex === -1 ? history.length : historyIndex;
       const next = Math.max(0, Math.min(history.length, from + direction));
@@ -355,6 +417,9 @@ export function createTuiView(options: {
       case 'down':
         vertical(1);
         break;
+      case 'newline':
+        replace(at, at, '\n');
+        break;
       case 'enter':
         submit();
         break;
@@ -394,6 +459,7 @@ export function createTuiView(options: {
     setInput(model, '');
     historyIndex = -1;
     model.prompt = '› ';
+    model.warning = '';
     model.editing = false;
 
     return pending;
@@ -406,11 +472,12 @@ export function createTuiView(options: {
     const value = model.input.trim();
     const pending = takeInput();
 
-    if (pending?.prompt && value) {
-      add(`› ${value}`, 'bold');
-    } else if (value) {
-      add(`\nВы › ${value}`, 'bold');
-      history.push(value);
+    if (value) {
+      add(value, 'user');
+
+      if (!pending?.prompt) {
+        history.push(value);
+      }
     }
 
     model.scroll = null;
@@ -426,14 +493,18 @@ export function createTuiView(options: {
    * Пустая подсказка означает обычный запрос, а непустая выводится в истории
    * над полем для уточнения или разрешения.
    */
-  function askRaw(prompt: string, prefix: string, signal?: AbortSignal): Promise<string> {
+  function askRaw(
+    prompt: string, prefix: string, signal?: AbortSignal, style: Style = 'accent',
+  ): Promise<string> {
     if (closed || signal?.aborted) {
       return Promise.reject(new DOMException('Ввод отменён', 'AbortError'));
     }
 
     if (prompt) {
-      add(prompt, 'accent');
+      add(prompt, style);
       model.scroll = null;
+      model.toolFocus = null;
+      model.warning = style === 'warning' ? 'Требуется разрешение' : '';
     }
 
     model.prompt = prefix;
@@ -465,6 +536,7 @@ export function createTuiView(options: {
       const screen = { title, items: choices.map(({ name }) => name), selected, offset: 0 };
 
       model.modal = screen;
+      model.toolFocus = null;
       modal = { screen, choices, current, resolve: resolve as Modal['resolve'], reject };
       schedule();
     });
@@ -473,10 +545,28 @@ export function createTuiView(options: {
   /**
    * Вывод отдельного события заканчивает предыдущий поток ответа.
    */
-  function add(text: string, style: 'normal' | 'dim' | 'bold' | 'accent' = 'normal'): void {
+  function add(text: string, style: Style = 'normal', literal = false): void {
     streaming = false;
-    append(model, text, style);
+    append(model, text, style, literal);
     schedule();
+  }
+
+  /**
+   * Новый вызов занимает своё место в истории. Дальнейшие обновления
+   * меняют только его содержимое и сохраняют состояние разворота.
+   */
+  function showTool(tool: Tool, block?: ToolBlock): ToolBlock {
+    if (block) {
+      block.tool = tool;
+    } else {
+      block = { tool, expanded: false };
+      model.entries.push(block);
+      streaming = false;
+    }
+
+    schedule();
+
+    return block;
   }
 
   /**
@@ -517,23 +607,25 @@ export function createTuiView(options: {
 
   return {
     print: add,
-    stream: (text) => {
-      if (streaming) {
+    stream: (text, messageId) => {
+      if (streaming && streamingId === messageId) {
         amend(model, text);
       } else if (clean(text)) {
         append(model, text);
         streaming = true;
+        streamingId = messageId;
       }
 
       schedule();
     },
     note: (text) => add(text, 'dim'),
-    amend: (text) => {
-      amend(model, text);
+    tool: showTool,
+    status: (value) => {
+      model.status = value;
       schedule();
     },
-    status: (title) => {
-      model.title = title;
+    task: (text) => {
+      model.task = text;
       schedule();
     },
     busy: (text) => {
@@ -544,9 +636,13 @@ export function createTuiView(options: {
       model.hint = text;
       schedule();
     },
-    ask: (prompt, signal) => askRaw(prompt, '› ', signal),
+    updateNotice: (notice) => {
+      model.update = notice;
+      schedule();
+    },
+    ask: (prompt, signal, style) => askRaw(prompt, '› ', signal, style),
     confirm: async (prompt, signal) => {
-      const answer = await askRaw(`${prompt} [y/N]`, 'y/N › ', signal);
+      const answer = await askRaw(`${prompt} [y/N]`, 'y/N › ', signal, 'warning');
 
       return /^(y|д|да)$/iu.test(answer.trim());
     },

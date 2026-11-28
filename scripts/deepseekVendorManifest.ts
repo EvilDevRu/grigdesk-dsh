@@ -299,7 +299,7 @@ async function verifyUpstreamFiles(upstream: string, manifest: DeepSeekVendorMan
     const mode = (await fs.stat(target)).mode;
 
     if (sha256(await fs.readFile(target)) !== file.sha256
-      || Boolean(mode & 0o111) !== (file.mode === '100755')) {
+      || process.platform !== 'win32' && Boolean(mode & 0o111) !== (file.mode === '100755')) {
       throw new Error(`Hash или режим изменён вручную: ${file.path}`);
     }
   }

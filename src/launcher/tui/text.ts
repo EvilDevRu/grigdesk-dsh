@@ -3,6 +3,8 @@
  * границы графем, чтобы курсор и столбцы совпадали на кириллице и широких символах.
  */
 
+import type { Segment } from './palette.ts';
+
 const segmenter = new Intl.Segmenter('ru', { granularity: 'grapheme' });
 const ascii = /^[\x20-\x7e]*$/u;
 const invisible = /^[\p{M}\p{Cf}]+$/u;
@@ -53,58 +55,82 @@ export function singleLine(value: string): string {
 }
 
 /**
- * Переносит абзацы по словам, а слишком длинные слова режет по целым графемам.
+ * Переносит один абзац между графемами, сохраняя атрибуты и адрес ссылки.
+ * Пробел разделяет слова только после первого печатного символа строки.
  */
-export function wrap(text: string, width: number): string[] {
-  const lines: string[] = [];
+export function wrapSegments(
+  segments: readonly Segment[], width: number, indent = 0, wordWrap = true,
+): Segment[][] {
+  let offset = 0;
+  let part = 0;
+  let boundary = segments[0]?.text.length ?? 0;
+  const glyphs = graphemes(segments.map(({ text }) => text).join('')).map((text) => {
+    while (offset >= boundary) {
+      part += 1;
+      boundary += segments[part]!.text.length;
+    }
 
-  for (const paragraph of text.split('\n')) {
-    const glyphs = graphemes(paragraph);
-    let start = 0;
+    offset += text.length;
 
-    while (start < glyphs.length) {
-      let end = start;
-      let space = -1;
-      let used = 0;
+    return { text, segment: segments[part]! };
+  });
+  const lines: Segment[][] = [];
+  const hanging = indent < width - 1 ? indent : 0;
+  let start = 0;
 
-      while (end < glyphs.length) {
-        const glyph = glyphs[end]!;
-        const size = glyphWidth(glyph);
+  while (start < glyphs.length) {
+    const padding = lines.length ? hanging : 0;
+    let used = padding;
+    let end = start;
+    let space = -1;
+    let word = false;
 
-        if (glyph === ' ' && end > start) {
-          space = end;
-        }
+    while (end < glyphs.length) {
+      const { text } = glyphs[end]!;
+      const size = glyphWidth(text);
 
-        if (used + size > width) {
-          break;
-        }
-
-        used += size;
-        end += 1;
+      if (wordWrap && text === ' ' && word && (lines.length > 0 || used >= hanging)) {
+        space = end;
       }
 
-      if (end === glyphs.length) {
-        lines.push(glyphs.slice(start).join(''));
+      if (used + size > width) {
         break;
       }
 
-      if (end === start) {
-        lines.push('�');
-        start += 1;
-      } else {
-        const cut = space === -1 ? end : space;
+      word ||= text !== ' ';
+      used += size;
+      end += 1;
+    }
 
-        lines.push(glyphs.slice(start, cut).join(''));
-        start = cut + Number(space !== -1);
+    const cut = end < glyphs.length && space >= 0 ? space : end;
+    const line: Segment[] = padding ? [{ text: ' '.repeat(padding), style: 'normal' }] : [];
+    let previous: Segment | undefined;
+
+    for (let index = start; index < Math.max(cut, start + 1); index += 1) {
+      const { text, segment } = glyphs[index]!;
+      const visible = cut === start ? '�' : text;
+
+      if (previous === segment) {
+        line.at(-1)!.text += visible;
+      } else {
+        line.push({ ...segment, text: visible });
+        previous = segment;
       }
     }
 
-    if (!glyphs.length) {
-      lines.push('');
-    }
+    lines.push(line);
+    start = cut === start ? start + 1 : cut + Number(end < glyphs.length && space >= 0);
   }
 
-  return lines;
+  return lines.length ? lines : [[]];
+}
+
+/**
+ * Переносит и обычные строки через те же правила ширины и разбиения слов.
+ */
+export function wrap(text: string, width: number): string[] {
+  return text.split('\n').flatMap((line) => wrapSegments([{ text: line, style: 'normal' }], width)
+    .map((row) => row.map(({ text }) => text).join('')));
 }
 
 /**

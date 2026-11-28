@@ -17,6 +17,7 @@ test('параметры терминального чата выбирают о
   assert.equal(options.glmMode, 'coding-plan');
   assert.equal(options.cwd, '/tmp/папка проекта');
   assert.equal(options.mode, 'read-only');
+  assert.equal(parseChatOptions(['--no-update-check']).noUpdateCheck, true);
   assert.throws(() => parseChatOptions(['-p', 'deepseek', '--glm-mode', 'api']), /применяется к GLM/u);
   assert.throws(() => parseChatOptions(['--last', '--resume', 'session']), /один способ продолжения/u);
   assert.throws(() => parseChatOptions(['--mode', 'danger-full-access']), /режим доступа/u);

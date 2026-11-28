@@ -2,13 +2,14 @@ import { once } from 'node:events';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { lstat, readFile, readdir, readlink } from 'node:fs/promises';
 import path from 'node:path';
+import { executableName } from '../lib/runtime/executable.ts';
 import { finished } from 'node:stream/promises';
 import { createHash } from 'node:crypto';
 
 import { Zip, ZipDeflate } from 'fflate';
 
 import { sha256File } from '../lib/node/hash.ts';
-import { readOnlyFileMode } from '../lib/node/files.ts';
+import { portableLinkTarget, readOnlyFileMode } from '../lib/node/files.ts';
 import { contractDecoders } from '../lib/core/contractDecoders.ts';
 import { readWorkerArtifact } from '../src/runtime/artifact.ts';
 import type { DeepSeekWorkerRuntime } from '../src/runtime/artifact.ts';
@@ -98,7 +99,7 @@ async function inventory(source: string, name: string): Promise<SourceEntry[]> {
       type: 'link',
       mode,
       source,
-      target: await readlink(source),
+      target: portableLinkTarget(await readlink(source)),
     }];
   }
 
@@ -208,7 +209,7 @@ export async function packagePayload(options: PackagePayloadOptions): Promise<Pa
 
   const entries = [
     ...await inventory(options.generationDirectory, 'generation'),
-    ...await inventory(options.workerNode, 'node'),
+    ...await inventory(options.workerNode, executableName('node', options.worker.platform)),
     ...await inventory(options.nodeLicense, 'NODE-LICENSE'),
     ...await inventory(options.workerBootstrap, 'worker-bootstrap.mjs'),
     ...await inventory(options.workerVerify, 'worker-verify.mjs'),

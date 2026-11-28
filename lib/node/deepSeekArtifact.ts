@@ -8,6 +8,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { isNodeVersionSupported } from '../runtime/nodeVersion.ts';
+import { portableLinkTarget } from './files.ts';
 
 export interface DeepSeekWorkerRuntime {
   nodeVersion: string;
@@ -34,6 +35,7 @@ export interface DeepSeekArtifactContract {
     settingsAcp: boolean;
     toolPermissions?: boolean;
     glmNativeGate?: boolean;
+    glmManagedSchedule?: boolean;
   };
 }
 
@@ -133,7 +135,7 @@ function inventory(root: string, relative = ''): InventoryEntry[] {
     const name = relative ? `${relative}/${entry}` : entry;
     const file = path.join(root, name);
     const stat = fs.lstatSync(file, { bigint: true });
-    const link = stat.isSymbolicLink() ? fs.readlinkSync(file) : undefined;
+    const link = stat.isSymbolicLink() ? portableLinkTarget(fs.readlinkSync(file)) : undefined;
     const item = inventoryEntry(name, stat, link);
 
     if (link !== undefined) {
@@ -165,7 +167,7 @@ async function inventoryAsync(root: string, relative = ''): Promise<InventoryEnt
     const name = relative ? `${relative}/${entry}` : entry;
     const file = path.join(root, name);
     const stat = stats[index]!;
-    const link = stat.isSymbolicLink() ? await fsp.readlink(file) : undefined;
+    const link = stat.isSymbolicLink() ? portableLinkTarget(await fsp.readlink(file)) : undefined;
     const item = inventoryEntry(name, stat, link);
 
     if (link !== undefined) {

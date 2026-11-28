@@ -1,11 +1,16 @@
 import { realpath } from 'node:fs/promises';
-import { stripVTControlCharacters } from 'node:util';
+import { homedir } from 'node:os';
+import { isAbsolute, relative, sep } from 'node:path';
 
 import { openChatAcp, record, type AcpPeer } from './chatAcp.ts';
+import type { Style } from './tui/palette.ts';
+import type { Tool, ToolBlock } from './tui/screen.ts';
+import { clean } from './tui/text.ts';
 import { createTuiView, type TuiView } from './tui/view.ts';
 import {
   chatHelp, createChatProfile, type ChatMode, type ChatOptions, type ChatProvider,
 } from './chatProfile.ts';
+import { checkChatUpdate, type UpdateTarget } from './updateCheck.ts';
 
 interface Choice<Value extends string = string> {
   value: Value;
@@ -17,7 +22,10 @@ interface ConfigChoice {
   choices: Choice[];
 }
 
-type Ask = (prompt: string, signal?: AbortSignal) => Promise<string>;
+interface TrackedTool {
+  event: Record<string, unknown>;
+  block: ToolBlock;
+}
 
 const abortOutcome = { outcome: { outcome: 'cancelled' } };
 const providerChoices: Choice<ChatProvider>[] = [
@@ -29,8 +37,52 @@ const modeChoices: Choice<ChatMode>[] = [
   { value: 'workspace-write', name: 'Запись в рабочей папке' }, { value: 'read-only', name: 'Только чтение' },
 ];
 
-function terminalText(value: string): string {
-  return stripVTControlCharacters(value).replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/gu, '');
+/**
+ * Сокращение домашнего пути применяется только в футере. Проверка границы
+ * каталога сохраняет абсолютный путь для соседней папки с похожим именем.
+ */
+function displayDirectory(cwd: string): string {
+  const fromHome = relative(homedir(), cwd);
+
+  return fromHome === '' ? '~'
+    : isAbsolute(fromHome) || fromHome === '..' || fromHome.startsWith('..' + sep) ? cwd
+    : '~' + sep + fromHome;
+}
+
+/**
+ * Harness поставляет текст результата в ACP content. Для других форм ACP
+ * сохраняем текстовый rawOutput, когда содержимое не имеет текстовой части.
+ */
+function toolDisplay(event: Record<string, unknown>, safe: (text: string) => string): Tool {
+  const input = record(event.rawInput);
+  const name = typeof event.title === 'string' ? event.title : 'Инструмент';
+  const shell = event.kind === 'execute' || name === 'bash';
+  const command = shell && typeof input.command === 'string' ? input.command : '';
+  const content = Array.isArray(event.content) ? event.content.map(record).flatMap((item) => {
+    const { text } = record(item.content);
+
+    return typeof text === 'string' ? [text] : [];
+  }).join('\n') : '';
+  const output = content || (typeof event.rawOutput === 'string'
+    ? event.rawOutput : event.rawOutput == null ? '' : JSON.stringify(event.rawOutput, null, 2));
+
+  return {
+    name: safe(name),
+    command: safe(command),
+    status: typeof event.status === 'string' ? event.status : '',
+    output: safe(output),
+  };
+}
+
+/**
+ * Время считается по монотонным часам и показывает только целые секунды.
+ * Минуты появляются, когда ход длится достаточно долго.
+ */
+function turnDuration(elapsed: number): string {
+  const seconds = Math.floor(elapsed / 1000);
+  const minutes = Math.floor(seconds / 60);
+
+  return `${minutes ? `${minutes}м ` : ''}${seconds % 60}с`;
 }
 
 /**
@@ -40,7 +92,7 @@ function terminalText(value: string): string {
 async function pick<Value extends string>(
   view: TuiView, title: string, choices: readonly Choice<Value>[], current?: Value,
 ): Promise<Value | undefined> {
-  return await view.pick(title, choices.map((item) => ({ ...item, name: terminalText(item.name) })), current);
+  return await view.pick(title, choices.map((item) => ({ ...item, name: clean(item.name) })), current);
 }
 
 /**
@@ -84,7 +136,9 @@ function modelId(value: string): string {
  * Терминал управляет вводом и подтверждениями, а ACP владеет сессиями, каталогом
  * и ходами. Завершение ввода закрывает дочерний процесс и временный профиль.
  */
-export async function runTerminalChat(options: ChatOptions, launcher: string[]): Promise<number> {
+export async function runTerminalChat(
+  options: ChatOptions, launcher: string[], updateTarget?: UpdateTarget,
+): Promise<number> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error('Для deepseek chat откройте интерактивный терминал.');
   }
@@ -100,14 +154,14 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
   let approvalQueue: Promise<unknown> = Promise.resolve();
   let credential = '';
   let failure: string | undefined;
-  const tools = new Map<unknown, Record<string, unknown>>();
+  const tools = new Map<string, Map<string, TrackedTool>>();
+  const tasks = new Map<string, string>();
 
   // Ключ не должен попасть в транскрипт и в сообщение об ошибке, которое пишет сам терминал.
-  const safe = (value: string) => terminalText(credential
-    ? value.replaceAll(credential, '[ключ скрыт]') : value);
-  const print = (value: string) => view.print(safe(value));
-  const ask: Ask = (question, signal = stop.signal) =>
-    view.ask(question, AbortSignal.any([stop.signal, signal]));
+  const safe = (value: string) => clean(credential ? value.replaceAll(credential, '[ключ скрыт]') : value);
+  const print = (value: string, style?: Style, literal?: boolean) => view.print(safe(value), style, literal);
+  const ask = (question: string, signal = stop.signal, style?: Style) =>
+    view.ask(question, AbortSignal.any([stop.signal, signal]), style);
 
   /**
    * Ctrl+C отменяет активный ход. Повторное прерывание или истечение срока
@@ -138,6 +192,10 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
     stdin: process.stdin, stdout: process.stdout, signal: stop.signal, onInterrupt: interrupt,
     title: 'Терминальный чат',
   });
+
+  if (updateTarget && !options.noUpdateCheck) {
+    void checkChatUpdate(updateTarget, stop.signal, view.updateNotice);
+  }
 
   try {
     options = { ...options, cwd: await realpath(options.cwd) };
@@ -179,27 +237,31 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
     const access = modeChoices.find(({ value }) => value === mode)!.name;
 
     /**
-     * Заголовок обновляется по фактической конфигурации сессии после
-     * подключения, смены параметров и продолжения сохранённого диалога.
+     * Футер берёт модель и уровень рассуждения из текущей конфигурации ACP.
+     * Команда статуса дополнительно показывает название подключения.
      */
-    function updateHeader(): string {
+    function updateStatus(): string {
       const model = configChoice(config, 'model').current;
       const effort = configChoice(config, 'reasoning_effort').current;
       const title = [connection, model && modelId(model), effort].filter(Boolean).join(' · ');
 
-      view.status(safe(title));
+      view.status({
+        model: safe(model ? modelId(model) : connection),
+        effort: effort ? safe(effort) : undefined,
+        directory: safe(displayDirectory(options.cwd)),
+      });
 
       return title;
     }
 
     try {
       stop.signal.throwIfAborted();
-      updateHeader();
+      updateStatus();
       view.busy('Подключение…');
       const client = openChatAcp({
         command: process.execPath, args: [...launcher, ...profile.args], cwd: options.cwd, env: profile.env,
         update: ({ sessionId: incoming, update: payload }) => {
-          if (incoming !== sessionId) {
+          if (typeof incoming !== 'string' || incoming !== sessionId) {
             return;
           }
 
@@ -208,27 +270,39 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
 
           if (update.sessionUpdate === 'config_option_update') {
             config = update.configOptions;
-            updateHeader();
-          } else if (update.sessionUpdate === 'tool_call') {
-            tools.set(update.toolCallId, update);
-            print(`\n· ${String(update.title ?? 'Инструмент')}\n`);
-          } else if (update.sessionUpdate === 'tool_call_update' && tools.has(update.toolCallId)) {
-            // Исходный rawInput нужен для показа запроса разрешения: обновление статуса его дополняет.
-            tools.set(update.toolCallId, { ...tools.get(update.toolCallId), ...update });
-            if (update.status === 'completed' || update.status === 'failed') {
-              view.amend(update.status === 'completed' ? '  ✓' : '  ✗ ошибка');
+            updateStatus();
+          } else if (update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update') {
+            const id = update.toolCallId;
+
+            if (typeof id !== 'string') {
+              return;
             }
+
+            const tracked = tools.get(incoming) ?? new Map<string, TrackedTool>();
+            tools.set(incoming, tracked);
+            const previous = tracked.get(id);
+            // Частичное обновление дополняет исходные аргументы для запроса разрешения.
+            const event = { ...previous?.event, ...update };
+            const block = view.tool(toolDisplay(event, safe), previous?.block);
+
+            tracked.set(id, { event, block });
           } else if (update.sessionUpdate === 'agent_message_chunk' && typeof content.text === 'string') {
-            view.stream(safe(content.text));
+            const messageId = typeof update.messageId === 'string' ? update.messageId : undefined;
+
+            view.stream(safe(content.text), messageId);
           } else if (update.sessionUpdate === 'user_message_chunk'
             && !turn && typeof content.text === 'string') {
             // Собственный запрос уже показан при отправке. Здесь отображается история при resume.
-            print(`\nВы › ${content.text}\n`);
+            print(content.text, 'user');
+            const task = safe(content.text.trim().split('\n')[0] ?? '');
+
+            tasks.set(incoming, task);
+            view.task(task);
           }
         },
         child: (params) => {
           if (params.sessionId === sessionId) {
-            print(`\n· ${String(params.name)} · ${String(params.status)}\n${String(params.text ?? '')}\n`);
+            print(`· ${String(params.name)} · ${String(params.status)}\n${String(params.text ?? '')}`, 'dim');
           }
         },
         question: (params) => {
@@ -245,12 +319,12 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
               const question = record(item);
               const choices = Array.isArray(question.options) ? question.options.map(record) : [];
 
-              print(`\n${String(question.question ?? '')}\n`);
+              print(String(question.question ?? ''), 'accent');
               if (question.detail) {
                 print(`${String(question.detail)}\n`);
               }
-              for (const [index, choice] of choices.entries()) {
-                print(`${index + 1}. ${String(choice.label)}\n`);
+              if (choices.length) {
+                print(choices.map((choice, index) => `${index + 1}. ${String(choice.label)}`).join('\n'));
               }
 
               const response = (await ask('Ответ › ', current.signal)).trim();
@@ -283,15 +357,16 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
 
             if (mode === 'workspace-write' && typeof allow?.optionId === 'string') {
               const detail = record(params.toolCall);
-              const tool = tools.get(detail.toolCallId);
+              const tool = typeof detail.toolCallId === 'string' && sessionId
+                ? tools.get(sessionId)?.get(detail.toolCallId)?.event : undefined;
               const args = detail.rawInput ?? tool?.rawInput;
-              print(`\nЗапрос разрешения · ${String(detail.title ?? tool?.title ?? 'инструмент')}\n`);
+              print(`Запрос разрешения · ${String(detail.title ?? tool?.title ?? 'инструмент')}`, 'warning');
 
               if (args !== undefined) {
-                print(`${JSON.stringify(args, null, 2).slice(0, 4000)}\n`);
+                print(JSON.stringify(args, null, 2).slice(0, 4000), 'normal', true);
               }
 
-              const confirmation = await ask('Разрешить один раз? [y/N] › ', currentTurn.signal);
+              const confirmation = await ask('Разрешить один раз? [y/N] › ', currentTurn.signal, 'warning');
               approved = /^(y|д|да)$/iu.test(confirmation.trim());
             }
 
@@ -335,14 +410,17 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
           } catch (error) {
             sessionId = previous;
             config = previousConfig;
+            view.task(previous ? tasks.get(previous) ?? '' : '');
             throw error;
           }
 
           if (previous && previous !== id) {
             await client.request('session/close', { sessionId: previous }, 5000);
+            tools.delete(previous);
           }
 
-          print('\nСессия продолжена.\n');
+          view.task(tasks.get(id) ?? '');
+          view.note('Сессия продолжена.');
         }
 
         /**
@@ -373,7 +451,7 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
 
           const selected = configChoice(config, id).current;
 
-          updateHeader();
+          updateStatus();
 
           return id === 'model' && selected ? modelId(selected) : selected ?? 'по умолчанию';
         }
@@ -419,9 +497,9 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
           await client.request('_grigdesk/terminal/ready', { sessionId });
         }
 
-        updateHeader();
+        updateStatus();
         view.busy(null);
-        view.note(safe(`${access} · ${options.cwd}`));
+        view.note(access);
 
         while (!stop.signal.aborted) {
           const value = (await ask('')).trim();
@@ -437,13 +515,14 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
               case '/model':
                 print(`Модель · ${await selectConfig('model', 'Модель', arg)}`);
                 break;
-              case '/effort':
-                print(
-                  `Уровень рассуждения · ${await selectConfig('reasoning_effort', 'Уровень рассуждения', arg)}`,
-                );
+              case '/effort': {
+                const effort = await selectConfig('reasoning_effort', 'Уровень рассуждения', arg);
+
+                print(`Уровень рассуждения · ${effort}`);
                 break;
+              }
               case '/status':
-                print(`${updateHeader()}\n${access} · ${options.cwd}\nСессия ${sessionId}`);
+                print(`${updateStatus()}\n${access} · ${options.cwd}\nСессия ${sessionId}`);
                 break;
               case '/help':
                 print(`${chatHelp}\n`);
@@ -463,7 +542,7 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
                   if (options.schedule) {
                     await client.request('_grigdesk/terminal/ready', { sessionId });
                   }
-                  updateHeader();
+                  updateStatus();
                 }
 
                 break;
@@ -484,17 +563,31 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
                 }
 
                 turn = new AbortController();
-                tools.clear();
+                const started = performance.now();
+                const task = safe(prompt.split('\n')[0] ?? '');
+
+                if (sessionId) {
+                  tasks.set(sessionId, task);
+                }
+
+                view.task(task);
                 view.busy('Ответ модели…');
-                print('');
 
                 try {
                   await client.request('session/prompt', {
                     sessionId, prompt: [{ type: 'text', text: prompt }],
                   }, 0);
+
+                  if (!turn.signal.aborted) {
+                    view.note(`Готово · ${turnDuration(performance.now() - started)}`);
+                  }
                 } finally {
                   view.busy(null);
-                  print(turn.signal.aborted ? 'Ход отменён.' : '');
+
+                  if (turn.signal.aborted) {
+                    print('Ход отменён.', 'warning');
+                  }
+
                   turn.abort();
                   turn = undefined;
                   clearTimeout(timer);
@@ -503,7 +596,7 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
             }
           } catch (error) {
             if (!stop.signal.aborted) {
-              print(`${(error as Error).message}\n`);
+              print((error as Error).message, 'error', true);
             }
           }
         }
@@ -524,6 +617,7 @@ export async function runTerminalChat(options: ChatOptions, launcher: string[]):
   } finally {
     clearTimeout(timer);
     view.close(failure);
+    stop.abort();
     process.off('SIGINT', interrupt);
     process.off('SIGTERM', terminate);
   }

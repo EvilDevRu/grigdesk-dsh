@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import * as crypto from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { runInNewContext } from 'node:vm';
 
 import { build } from '../node_modules/esbuild/lib/main.js';
@@ -22,6 +26,34 @@ test('runtime-info принимает совместимый manifest без о�
   const value = runtimeInfoFixture();
 
   assert.deepEqual(decodeDeepSeekRuntimeInfo(value), value);
+});
+
+test('release сохраняет .exe в имени файла, манифесте и контрольной сумме Windows', async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'dsh-win-release-'));
+  const binary = path.join(directory, 'candidate.exe');
+  const tag = 'v1.0.0-rc.1';
+
+  t.after(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  await writeFile(binary, 'Windows candidate');
+  await writeFile(`${binary}.runtime-info.json`, JSON.stringify({
+    ...runtimeInfoFixture(), platform: 'win32', arch: 'arm64',
+  }));
+  const run = promisify(execFile);
+
+  await run(process.execPath, [fileURLToPath(new URL('../scripts/cli.mts', import.meta.url)), 'release',
+    '--tag', tag, '--binary', binary, '--sidecar', '--prerelease', '--dry-run', '--cache-dir', directory]);
+
+  const staged = path.join(directory, 'release', tag);
+  const filename = 'deepseek-win32-arm64.exe';
+  const manifest = JSON.parse(await readFile(path.join(staged, 'manifest.json'), 'utf8'));
+
+  assert.equal(manifest.assets[0].file, filename);
+  assert.equal(await readFile(path.join(staged, filename), 'utf8'), 'Windows candidate');
+  assert.equal(await readFile(path.join(staged, `${filename}.sha256`), 'utf8'),
+    `${manifest.assets[0].sha256}  ${filename}\n`);
 });
 
 test('capability подтверждения сохраняется без изменения формы старого metadata', () => {
