@@ -10,18 +10,20 @@ let factory: string | undefined;
  * а отсутствие PID определяется отдельно от ошибок чтения времени запуска.
  */
 function systemProcessProbe(pid: number): { command: string; args: string[] } | undefined {
-  const root = process.env.SystemRoot;
+  const root = process.env.SystemRoot ?? process.env.windir;
 
   if (!root || !path.isAbsolute(root)) {
     return undefined;
   }
 
+  const script = `try { $p = [System.Diagnostics.Process]::GetProcessById(${pid}) } `
+    + 'catch [System.ArgumentException] { exit 3 } catch { exit 1 }; '
+    + 'try { [Console]::WriteLine($p.StartTime.ToUniversalTime().Ticks) } catch { exit 1 }';
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+
   return {
     command: path.join(root, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
-    args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
-      `$p = Get-Process -Id ${pid} -ErrorAction SilentlyContinue; `
-      + 'if (!$p) { exit 3 }; try { $t = $p.StartTime; if (!$t) { exit 1 }; '
-      + '[Console]::WriteLine($t.ToUniversalTime().Ticks) } catch { exit 1 }'],
+    args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
   };
 }
 
@@ -57,14 +59,20 @@ export async function readWindowsProcessStart(pid: number): Promise<{
 
   try {
     const { stdout } = await run(probe.command, probe.args, {
-      timeout: 5000,
-      maxBuffer: 1024,
+      timeout: factory ? 5000 : 20_000,
+      maxBuffer: 16_384,
       windowsHide: true,
     });
     const starttime = stdout.trim();
 
     return /^\d+$/u.test(starttime) ? { starttime, dead: false } : { dead: false };
   } catch (error) {
-    return { dead: (error as { code?: number }).code === 3 };
+    const { code, signal } = error as { code?: number | string; signal?: string };
+
+    if (code !== 3 && process.env.GRIGDESK_DSH_LAUNCHER_TRACE === '1') {
+      process.stderr.write(`Проверка владельца блокировки Windows: ${code ?? signal ?? 'нет статуса'}\n`);
+    }
+
+    return { dead: code === 3 };
   }
 }
