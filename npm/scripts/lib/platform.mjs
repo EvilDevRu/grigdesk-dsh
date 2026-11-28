@@ -1,6 +1,6 @@
 /**
  * Платформа npm-пакета должна совпадать с одним из ELF релиза. Имена сборок
- * совпадают с assets manifest.json: deepseek-<platform>-<arch>.
+ * совпадают с assets manifest.json: dsh-<platform>-<arch>.
  */
 const supported = new Set(['linux-x64', 'linux-arm64', 'darwin-arm64']);
 
@@ -13,7 +13,7 @@ export function describePlatform(platform = process.platform, arch = process.arc
   return {
     key,
     supported: supported.has(key),
-    asset: `deepseek-${key}`,
+    asset: `dsh-${key}`,
     reason: platform === 'win32'
       ? 'Windows не поддерживается: поставка собирается для Linux x64/arm64 и macOS Apple Silicon'
       : `Нет сборки для ${key}: доступны ${[...supported].sort().join(', ')}`,

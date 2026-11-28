@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { seaHostTarget } from '../../lib/node/nodeRuntime.ts';
 import { dshCacheHome } from '../../lib/runtime/dshHome.ts';
-import { executableName } from '../../lib/runtime/executable.ts';
+import { releaseAssetName } from '../../lib/runtime/executable.ts';
 import { record } from './chatAcp.ts';
 
 export interface UpdateTarget {
@@ -165,7 +165,7 @@ export async function checkChatUpdate(
       }
     }
 
-    const asset = executableName(`deepseek-${target}`, current.platform);
+    const asset = releaseAssetName(current.platform, current.arch);
     const release = await fetchRelease(asset, signal, fetchImpl);
 
     signal.throwIfAborted();

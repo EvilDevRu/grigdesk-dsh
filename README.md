@@ -61,13 +61,13 @@ Once a stable release is published, download desktop binaries from
 
 | Platform | Download |
 | :--- | :--- |
-| Linux x64 | [`deepseek-linux-x64`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/deepseek-linux-x64) |
-| Linux ARM64 | [`deepseek-linux-arm64`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/deepseek-linux-arm64) |
-| macOS on Apple Silicon | [`deepseek-darwin-arm64`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/deepseek-darwin-arm64) |
-| Windows x64 | [`deepseek-win32-x64.exe`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/deepseek-win32-x64.exe) |
-| Windows ARM64 | [`deepseek-win32-arm64.exe`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/deepseek-win32-arm64.exe) |
-| Android ARM64 (`arm64-v8a`) | [`android-dsh-arm64-v8a`](#android-bundles) |
-| Android x86_64 | [`android-dsh-x86_64`](#android-bundles) |
+| Linux x64 | [`dsh-linux-x64`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/dsh-linux-x64) |
+| Linux ARM64 | [`dsh-linux-arm64`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/dsh-linux-arm64) |
+| macOS on Apple Silicon | [`dsh-darwin-arm64`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/dsh-darwin-arm64) |
+| Windows x64 | [`dsh-win32-x64.exe`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/dsh-win32-x64.exe) |
+| Windows ARM64 | [`dsh-win32-arm64.exe`](https://github.com/EvilDevRu/grigdesk-dsh/releases/latest/download/dsh-win32-arm64.exe) |
+| Android ARM64 (`arm64-v8a`) | [`dsh-android-arm64-v8a`](#android-bundles) |
+| Android x86_64 | [`dsh-android-x86_64`](#android-bundles) |
 
 <details>
 <summary><strong>Verify a manual download</strong></summary>
@@ -75,18 +75,18 @@ Once a stable release is published, download desktop binaries from
 Download the matching `.sha256` file into the same directory. For Linux x64, run:
 
 ```bash
-sha256sum -c deepseek-linux-x64.sha256 &&
-  chmod +x deepseek-linux-x64 &&
-  ./deepseek-linux-x64 --verify --json
+sha256sum -c dsh-linux-x64.sha256 &&
+  chmod +x dsh-linux-x64 &&
+  ./dsh-linux-x64 --verify --json
 ```
 
-For Linux ARM64, use `deepseek-linux-arm64` in the commands above. On macOS, use
-`shasum -a 256 -c deepseek-darwin-arm64.sha256` for the checksum and
-`deepseek-darwin-arm64` for the executable.
+For Linux ARM64, use `dsh-linux-arm64` in the commands above. On macOS, use
+`shasum -a 256 -c dsh-darwin-arm64.sha256` for the checksum and
+`dsh-darwin-arm64` for the executable.
 
-On Windows, compare the output of `Get-FileHash .\deepseek-win32-x64.exe -Algorithm SHA256`
-with the `.sha256` file, then run `.\deepseek-win32-x64.exe --verify --json`.
-For Windows ARM64, use `deepseek-win32-arm64.exe` in both commands.
+On Windows, compare the output of `Get-FileHash .\dsh-win32-x64.exe -Algorithm SHA256`
+with the `.sha256` file, then run `.\dsh-win32-x64.exe --verify --json`.
+For Windows ARM64, use `dsh-win32-arm64.exe` in both commands.
 
 </details>
 
@@ -103,7 +103,7 @@ from **Artifacts**. Each bundle contains the `.so` libraries for APK packaging a
 
 On first use, add an API key with `deepseek login` or set the environment variable for your connection.
 Run `deepseek`, `glm`, or `qwen` from your project directory. If you downloaded the binary manually,
-use its path, for example `./deepseek-linux-x64 login` to set up the key and `./deepseek-linux-x64 chat`
+use its path, for example `./dsh-linux-x64 login` to set up the key and `./dsh-linux-x64 chat`
 to open a chat. Use the arrow keys or left-click to select a connection and access mode.
 Scroll through the conversation with the mouse wheel or `PgUp` and `PgDn`.
 Your prompts are marked by a tinted panel with a left rail. Replies render Markdown tables, quotes,

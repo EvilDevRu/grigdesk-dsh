@@ -79,7 +79,7 @@ async function fakeRelease(elf: Buffer, sha256 = createHash('sha256').update(elf
   const manifest = {
     format: 1,
     tag: 'v1.2.3',
-    assets: [{ file: 'deepseek-linux-x64', sha256, size: elf.length, platform: 'linux', arch: 'x64' }],
+    assets: [{ file: 'dsh-linux-x64', sha256, size: elf.length, platform: 'linux', arch: 'x64' }],
   };
   const server = createServer((request, response) => {
     requests.push(request.url ?? '');
@@ -87,7 +87,7 @@ async function fakeRelease(elf: Buffer, sha256 = createHash('sha256').update(elf
     if (request.url === '/v1.2.3/manifest.json') {
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify(manifest));
-    } else if (request.url === '/v1.2.3/deepseek-linux-x64') {
+    } else if (request.url === '/v1.2.3/dsh-linux-x64') {
       response.end(elf);
     } else {
       response.statusCode = 404;
@@ -122,7 +122,7 @@ test('launcher glm и qwen открывают чат провайдера, сл�
   assert.deepEqual(forward('qwen', ['logout', '--all']), ['logout', '--all']);
   assert.deepEqual(forward('qwen', ['--runtime-info', '--json']), ['--runtime-info', '--json']);
   assert.equal(describePlatform('win32', 'x64').supported, false);
-  assert.equal(describePlatform('linux', 'x64').asset, 'deepseek-linux-x64');
+  assert.equal(describePlatform('linux', 'x64').asset, 'dsh-linux-x64');
   assert.throws(() => downloadBase({ GRIGDESK_DEEPSEEK_DOWNLOAD_BASE: 'http://evil.example/x' }), /HTTPS/u);
   const loopback = { GRIGDESK_DEEPSEEK_DOWNLOAD_BASE: 'http://127.0.0.1:9/' };
 
@@ -158,11 +158,11 @@ test('installVersion скачивает проверенный ELF, перекл
   assert.equal(await readCurrentElf(root), binary);
   assert.match(await readFile(path.join(path.dirname(binary), 'asset.json'), 'utf8'), /"tag": "v1.2.3"/u);
   assert.deepEqual(release.requests.sort(),
-    ['/v1.2.3/deepseek-linux-x64', '/v1.2.3/manifest.json']);
+    ['/v1.2.3/dsh-linux-x64', '/v1.2.3/manifest.json']);
 
   // Повторная установка: manifest читается, ELF уже на месте — загрузки нет.
   await installVersion({ tag: 'v1.2.3', platform, env, log: () => {} });
-  assert.equal(release.requests.filter((url) => url.endsWith('deepseek-linux-x64')).length, 1);
+  assert.equal(release.requests.filter((url) => url.endsWith('dsh-linux-x64')).length, 1);
 
   // Побитый ELF не выдаётся за установленный: receipt требует совпадения с manifest.
   await chmod(binary, 0o644);

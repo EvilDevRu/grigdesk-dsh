@@ -47,7 +47,7 @@ test('release сохраняет .exe в имени файла, манифест
     '--tag', tag, '--binary', binary, '--sidecar', '--prerelease', '--dry-run', '--cache-dir', directory]);
 
   const staged = path.join(directory, 'release', tag);
-  const filename = 'deepseek-win32-arm64.exe';
+  const filename = 'dsh-win32-arm64.exe';
   const manifest = JSON.parse(await readFile(path.join(staged, 'manifest.json'), 'utf8'));
 
   assert.equal(manifest.assets[0].file, filename);

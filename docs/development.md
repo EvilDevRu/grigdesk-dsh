@@ -47,8 +47,8 @@ upstream, соберёт бинарник и проверит его. По ум�
 | Цели | Проверка в CI | Результат |
 |---|---|---|
 | Linux x64 и ARM64, macOS ARM64 | `--verify --json` и metadata на нативных runner | Бинарники и `.sha256` в GitHub Release |
-| Windows x64 и ARM64 | `--verify --json` и metadata на нативных runner | `deepseek-win32-x64.exe`, `deepseek-win32-arm64.exe` и `.sha256` в GitHub Release |
-| Android `arm64-v8a` и `x86_64` | ELF, загрузчик Bionic, выравнивание сегментов, ресурс SEA и контрольные суммы | Артефакты Actions `android-dsh-arm64-v8a` и `android-dsh-x86_64` |
+| Windows x64 и ARM64 | `--verify --json` и metadata на нативных runner | `dsh-win32-x64.exe`, `dsh-win32-arm64.exe` и `.sha256` в GitHub Release |
+| Android `arm64-v8a` и `x86_64` | ELF, загрузчик Bionic, выравнивание сегментов, ресурс SEA и контрольные суммы | Артефакты Actions `dsh-android-arm64-v8a` и `dsh-android-x86_64` |
 
 Допуск GLM — это вход сборки. Живой smoke требует ключи Z.ai, поэтому выполняется
 **локально**, а CI собирает все платформы из уже зафиксированного `compatibility/glm.json`.
@@ -58,8 +58,8 @@ upstream, соберёт бинарник и проверит его. По ум�
    → Actions: проверки, настольные бинарники и комплекты Android, предварительный GitHub Release
 
 2. локально:
-   gh release download v1.2.0-rc.1 -p 'deepseek-linux-x64*' -D /tmp/dsh-rc
-   bin/grigdesk-dsh-ctl admit --binary /tmp/dsh-rc/deepseek-linux-x64 --mode api --admit
+   gh release download v1.2.0-rc.1 -p 'dsh-linux-x64*' -D /tmp/dsh-rc
+   bin/grigdesk-dsh-ctl admit --binary /tmp/dsh-rc/dsh-linux-x64 --mode api --admit
    → identity по --runtime-info ELF → живой smoke (3 хода, HTTP-ошибки Z.ai)
    → запись {mode, compatibility} в compatibility/glm.json
 

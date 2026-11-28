@@ -699,7 +699,7 @@ test('runTerminalChat: инструмент, разрешение и восст�
     await waitFor(/Разрешить один раз/u);
     assert.doesNotMatch(clean(output), /Доступна версия/u);
     finishUpdate(Response.json({
-      format: 1, tag: 'v1.1.0', assets: [{ file: 'deepseek-linux-x64', packageId: '2'.repeat(64) }],
+      format: 1, tag: 'v1.1.0', assets: [{ file: 'dsh-linux-x64', packageId: '2'.repeat(64) }],
     }));
     await waitFor(/Доступна версия 1\.1\.0/u);
     assert.match(clean(output), /"command": "echo \*\*буквально\*\*"/u);

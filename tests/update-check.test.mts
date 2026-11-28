@@ -37,7 +37,7 @@ async function cacheFixture(t: TestContext): Promise<string> {
   return cache;
 }
 
-function release(tag = 'v1.10.0', file = 'deepseek-linux-x64', packageId = nextId): Response {
+function release(tag = 'v1.10.0', file = 'dsh-linux-x64', packageId = nextId): Response {
   return Response.json({ format: 1, tag, assets: [{ file, packageId }] });
 }
 
@@ -81,12 +81,12 @@ test('обновление сравнивает стабильный тег, ide
     { target: { ...current, binaryVersion: '1.11.0' }, response: release(), expected: [null] },
     {
       target: current,
-      response: release('v1.10.0', 'deepseek-linux-x64', current.packageId),
+      response: release('v1.10.0', 'dsh-linux-x64', current.packageId),
       expected: [null],
     },
     { target: current, response: release('v1.10.0-beta.1'), expected: [] },
     { target: win, response: release(), expected: [null] },
-    { target: win, response: release('v1.10.0', 'deepseek-win32-arm64.exe'), expected: [notice] },
+    { target: win, response: release('v1.10.0', 'dsh-win32-arm64.exe'), expected: [notice] },
   ];
 
   for (const { target, response, expected } of cases) {

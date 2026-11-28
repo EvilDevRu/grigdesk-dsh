@@ -90,7 +90,7 @@ jobs:
         shell: bash
     env:
       DSH_OUTPUT: deepseek${{ matrix.extension }}
-      DSH_ASSET: deepseek-${{ matrix.target }}${{ matrix.extension }}
+      DSH_ASSET: dsh-${{ matrix.target }}${{ matrix.extension }}
       # Git for Windows по умолчанию использует CRLF и ограничивает длинные пути.
       GIT_CONFIG_COUNT: 2
       GIT_CONFIG_KEY_0: core.autocrlf
@@ -210,7 +210,7 @@ jobs:
       - name: Артефакт Android
         uses: actions/upload-artifact@v4
         with:
-          name: android-dsh-${{ matrix.abi }}
+          name: dsh-android-${{ matrix.abi }}
           path: android-dist/${{ matrix.abi }}/
           if-no-files-found: error
           retention-days: 14
@@ -235,16 +235,25 @@ jobs:
       - name: Скачать бинарники всех настольных целей
         uses: actions/download-artifact@v4
         with:
-          pattern: dsh-*
+          pattern: 'dsh-{linux,darwin,win32}-*'
           path: ${{ github.workspace }}/.cache/release-download
           merge-multiple: true
           run-id: ${{ inputs.run_id || github.run_id }}
           github-token: ${{ github.token }}
-      - name: Права Linux x64 после скачивания
+      - name: Подготовка артефактов после скачивания
         # download-artifact не сохраняет executable bit. Linux x64 нужен для гейта допуска GLM.
         run: |
-          chmod 0755 .cache/release-download/deepseek-linux-x64
-          ls -la .cache/release-download
+          downloads=.cache/release-download
+          # При ручной публикации старого прогона приводим имена и sidecar к новому формату.
+          for legacy in "$downloads"/deepseek-*; do
+            if [[ -f "$legacy" ]]; then
+              filename=${legacy##*/}
+              target="$downloads/dsh-${filename#deepseek-}"
+              [[ -e "$target" ]] || mv -- "$legacy" "$target"
+            fi
+          done
+          chmod 0755 "$downloads/dsh-linux-x64"
+          ls -la "$downloads"
       - name: Классифицировать тег
         id: tag
         run: |
@@ -259,7 +268,7 @@ jobs:
         if: steps.tag.outputs.prerelease == ''
         run: |
           MODE=$(node -p "require('./contracts/grigdesk-host-contract.json').glm.mode")
-          node scripts/admissionCheck.mts --binary "$GITHUB_WORKSPACE/.cache/release-download/deepseek-linux-x64" \
+          node scripts/admissionCheck.mts --binary "$GITHUB_WORKSPACE/.cache/release-download/dsh-linux-x64" \
             --mode "$MODE" --host-contract "$GITHUB_WORKSPACE/contracts/grigdesk-host-contract.json"
       - name: Опубликовать Release
         env:
@@ -268,13 +277,13 @@ jobs:
           downloads="$GITHUB_WORKSPACE/.cache/release-download"
           windows=()
           # Старые прогоны для ручной публикации могли содержать только Linux и macOS.
-          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch || -f "$downloads/deepseek-win32-x64.exe" \
-            || -f "$downloads/deepseek-win32-arm64.exe" ]]; then
-            windows=(--binary "$downloads/deepseek-win32-x64.exe" --binary "$downloads/deepseek-win32-arm64.exe")
+          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch || -f "$downloads/dsh-win32-x64.exe" \
+            || -f "$downloads/dsh-win32-arm64.exe" ]]; then
+            windows=(--binary "$downloads/dsh-win32-x64.exe" --binary "$downloads/dsh-win32-arm64.exe")
           fi
           node scripts/cli.mts release --tag "$RELEASE_TAG" \
-            --binary "$downloads/deepseek-linux-x64" \
-            --binary "$downloads/deepseek-linux-arm64" \
-            --binary "$downloads/deepseek-darwin-arm64" \
+            --binary "$downloads/dsh-linux-x64" \
+            --binary "$downloads/dsh-linux-arm64" \
+            --binary "$downloads/dsh-darwin-arm64" \
             "${windows[@]}" \
             --sidecar ${{ steps.tag.outputs.prerelease }}
