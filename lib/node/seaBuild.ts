@@ -43,7 +43,7 @@ export function nodeExtractArgs(runtime: NodeRuntime, archive: string, minimal =
 }
 
 /**
- * Официальный ZIP Node распаковывает BSD tar из System32.
+ * В Windows архивы Node и upstream распаковывает BSD tar из System32.
  * Git Bash может поставить свой GNU tar первым в PATH, поэтому путь задаётся явно.
  */
 export function nodeTarExecutable(platform: string = process.platform): string {

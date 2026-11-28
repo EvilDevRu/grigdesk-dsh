@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { sha256 } from '../lib/node/hash.ts';
+import { nodeTarExecutable } from '../lib/node/seaBuild.ts';
 
 const exec = promisify(execFile);
 
@@ -428,7 +429,7 @@ async function extractSelectedUpstream(options: GitSelection, destination: strin
   try {
     await exec('git', ['-C', options.sourceDir, 'archive', `--output=${archive}`, options.commit,
       '--', ...roots]);
-    await exec('tar', ['-xf', archive, '-C', destination]);
+    await exec(nodeTarExecutable(), ['-xf', archive, '-C', destination]);
   } finally {
     await fs.rm(archive, { force: true });
   }
